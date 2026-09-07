@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block inhalt %}
+<form method="post" action="/suche" id="formular">
+<div class="karte">
+  <h2>1. Persönliche Daten <span class="klein">(werden lokal gespeichert, nur einmal nötig)</span></h2>
+  <div class="raster">
+    <div><label>Vorname</label><input name="vorname" required value="{{ person.vorname or '' }}"></div>
+    <div><label>Nachname</label><input name="nachname" required value="{{ person.nachname or '' }}"></div>
+    <div class="breit"><label>Straße und Hausnummer</label><input name="strasse" required value="{{ person.strasse or '' }}"></div>
+    <div><label>PLZ</label><input name="plz" required pattern="[0-9]{4,5}" value="{{ person.plz or '' }}"></div>
+    <div><label>Ort</label><input name="ort" required value="{{ person.ort or '' }}"></div>
+    <div><label>E-Mail</label><input name="email" type="email" required value="{{ person.email or '' }}"></div>
+    <div><label>Geburtsdatum (optional)</label><input name="geburtsdatum" placeholder="TT.MM.JJJJ" value="{{ person.geburtsdatum or '' }}"></div>
+    <div><label>IBAN für die Auszahlung</label><input name="iban" placeholder="DE.." value="{{ person.iban or '' }}"></div>
+    <div><label>Kontoinhaber (falls abweichend)</label><input name="kontoinhaber" value="{{ person.kontoinhaber or '' }}"></div>
+  </div>
+</div>
+
+<div class="karte">
+  <h2>2. Ticket</h2>
+  <div class="raster">
+    <div><label>Gültigkeitsmonat</label>
+      <select name="monat" required>{% for wert, name in monate %}<option value="{{ wert }}">{{ name }}</option>{% endfor %}</select></div>
+    <div><label>Ticket-/Abonummer</label><input name="ticketnummer" value="{{ strecke.ticketnummer or '' }}" placeholder="steht auf dem Ticket"></div>
+  </div>
+  <p class="klein">Nur abgeschlossene Monate der letzten 12 Monate (Antragsfrist). Der Ticketpreis wird automatisch nach Monat gesetzt.
+  Datenquelle: {{ quelle }}. Pro Monat wird einmalig eine Archivdatei (ca. 100–650 MB) geladen und lokal gespeichert
+  {% if archiv_monate %}(bereits vorhanden: {{ archiv_monate|join(', ') }}){% endif %}.</p>
+  <p class="klein" id="archivstatus"></p>
+</div>
+
+<div class="karte">
+  <h2>3. Pendlerstrecke</h2>
+  <div class="raster">
+    <div class="rel"><label>Von (Bahnhof)</label>
+      <input id="start" autocomplete="off" required value="{{ strecke.start_name or '' }}" data-ziel="start_id" data-name="start_name">
+      <input type="hidden" name="start_id" id="start_id" value="{{ strecke.start_id or '' }}">
+      <input type="hidden" name="start_name" id="start_name" value="{{ strecke.start_name or '' }}">
+      <div class="vorschlaege" id="start_v" hidden></div></div>
+    <div class="rel"><label>Nach (Bahnhof)</label>
+      <input id="ziel" autocomplete="off" required value="{{ strecke.ziel_name or '' }}" data-ziel="ziel_id" data-name="ziel_name">
+      <input type="hidden" name="ziel_id" id="ziel_id" value="{{ strecke.ziel_id or '' }}">
+      <input type="hidden" name="ziel_name" id="ziel_name" value="{{ strecke.ziel_name or '' }}">
+      <div class="vorschlaege" id="ziel_v" hidden></div></div>
+    <div><label>Hinfahrt: Abfahrt etwa um</label><input name="hin_ab" type="time" required value="{{ strecke.hin_ab or '07:30' }}"></div>
+    <div><label>Rückfahrt: Abfahrt etwa um</label><input name="rueck_ab" type="time" required value="{{ strecke.rueck_ab or '17:00' }}"></div>
+    <div><label>Zeitfenster ± Minuten</label><input name="toleranz" type="number" min="15" max="360" value="{{ strecke.toleranz or 90 }}"></div>
+    <div class="breit wochentage"><label>Pendeltage</label>
+      {% set wt = strecke.wochentage or [1,2,3,4,5] %}
+      {% for n, k in [(1,'Mo'),(2,'Di'),(3,'Mi'),(4,'Do'),(5,'Fr'),(6,'Sa'),(7,'So')] %}
+      <label><input type="checkbox" name="wochentage" value="{{ n }}" {% if n in wt %}checked{% endif %}> {{ k }}</label>{% endfor %}</div>
+    <div class="breit"><label>Nicht gefahren (Urlaub, Homeoffice, Feiertage) – Datumsliste, z.B. 2026-08-03, 2026-08-04</label>
+      <input name="frei" placeholder="JJJJ-MM-TT, JJJJ-MM-TT, ..."></div>
+  </div>
+  <p class="klein">Es werden nur Direktverbindungen im Nahverkehr (RE/RB/S-Bahn) gesucht. Bitte anschließend nur Fahrten einreichen, die Sie wirklich gefahren sind.</p>
+</div>
+
+<div class="zeile">
+  <button class="knopf" type="submit">Verspätungen suchen</button>
+  <span class="klein">{{ "%.2f"|format(regeln.pauschale_eur) }} EUR je Fall ab {{ regeln.schwelle_einzelfall_min }} min oder je volle Stunde aus gesammelten Verspätungen ab {{ regeln.schwelle_sammeln_min }} min; Bagatellgrenze {{ "%.2f"|format(regeln.bagatellgrenze_eur) }} EUR; Kappung {{ (regeln.kappung_anteil*100)|int }} % des Ticketpreises. Es wird automatisch der Rechenweg mit dem höheren Betrag gewählt.</span>
+</div>
+</form>
+
+<script>
+for (const feld of [document.getElementById('start'), document.getElementById('ziel')]) {
+  const box = document.getElementById(feld.id + '_v');
+  const idFeld = document.getElementById(feld.dataset.ziel), nameFeld = document.getElementById(feld.dataset.name);
+  let timer;
+  feld.addEventListener('input', () => {
+    idFeld.value = ''; nameFeld.value = '';
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (feld.value.length < 2) { box.hidden = true; return; }
+      const r = await fetch('/api/stationen?q=' + encodeURIComponent(feld.value));
+      const liste = await r.json();
+      box.innerHTML = '';
+      for (const s of liste) {
+        const d = document.createElement('div'); d.textContent = s.name;
+        d.onclick = () => { feld.value = s.name; idFeld.value = s.id; nameFeld.value = s.name; box.hidden = true; };
+        box.appendChild(d);
+      }
+      box.hidden = liste.length === 0;
+    }, 250);
+  });
+  feld.addEventListener('blur', () => setTimeout(() => box.hidden = true, 200));
+}
+async function archivTick() {
+  try {
+    const r = await fetch('/api/archiv'); const a = await r.json();
+    const el = document.getElementById('archivstatus');
+    const dl = Object.entries(a.downloads);
+    if (dl.length) { const [m, d] = dl[0]; el.textContent = 'Lade Archiv ' + m + ': ' + Math.round(d.geladen / 1048576) + ' / ' + Math.round(d.gesamt / 1048576) + ' MB …'; setTimeout(archivTick, 1000); }
+    else if (!a.stationen_bereit) { el.textContent = 'Bahnhofsliste wird vorbereitet …'; setTimeout(archivTick, 1000); }
+    else el.textContent = '';
+  } catch (e) { setTimeout(archivTick, 3000); }
+}
+archivTick();
+document.getElementById('formular').addEventListener('submit', e => {
+  for (const id of ['start_id', 'ziel_id']) {
+    if (!document.getElementById(id).value) { e.preventDefault(); alert('Bitte Bahnhöfe aus der Vorschlagsliste auswählen.'); return; }
+  }
+});
+</script>
+{% endblock %}

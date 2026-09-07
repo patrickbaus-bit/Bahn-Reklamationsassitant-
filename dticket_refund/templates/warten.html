@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block inhalt %}
+<div class="karte">
+  <h2>Suche läuft: {{ job.strecke.start.name }} ⇄ {{ job.strecke.ziel.name }}, {{ job.ticket.monat_label }}</h2>
+  <div class="balken"><div id="balken" style="width:0%"></div></div>
+  <p class="klein" id="text">Frage Echtzeitdaten ab …</p>
+</div>
+<script>
+async function tick() {
+  const r = await fetch('/api/status/{{ job_id }}'); const s = await r.json();
+  if (s.status !== 'laeuft') { location.reload(); return; }
+  const a = await (await fetch('/api/archiv')).json();
+  const dl = Object.entries(a.downloads);
+  if (dl.length) { const [m, d] = dl[0];
+    document.getElementById('balken').style.width = (d.gesamt ? 100 * d.geladen / d.gesamt : 0) + '%';
+    document.getElementById('text').textContent = 'Lade Echtzeitarchiv ' + m + ': ' + Math.round(d.geladen / 1048576) + ' / ' + Math.round(d.gesamt / 1048576) + ' MB (einmalig)'; }
+  else if (s.gesamt) { document.getElementById('balken').style.width = (100 * s.erledigt / s.gesamt) + '%';
+    document.getElementById('text').textContent = s.erledigt + ' von ' + s.gesamt + ' Tagesabfragen erledigt'; }
+  setTimeout(tick, 800);
+}
+tick();
+</script>
+{% endblock %}

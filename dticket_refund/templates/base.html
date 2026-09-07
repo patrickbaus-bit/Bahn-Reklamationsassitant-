@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titel %}Deutschlandticket-Refund{% endblock %}</title>
+<style>
+  :root { --rot: #ec0016; --grau: #f4f4f4; --text: #282d37; --linie: #d7dce1; --gruen: #2e7d32; --gelb: #f59e0b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--grau); }
+  header { background: var(--rot); color: #fff; padding: 14px 24px; font-weight: 700; font-size: 18px; }
+  header small { font-weight: 400; opacity: .9; margin-left: 10px; }
+  main { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+  .karte { background: #fff; border-radius: 10px; padding: 20px 24px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h2 { margin: 0 0 12px; font-size: 17px; }
+  .raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px 16px; }
+  label { display: block; font-size: 13px; color: #555; margin-bottom: 3px; }
+  input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--linie); border-radius: 6px; font: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--rot); border-color: transparent; }
+  .breit { grid-column: 1 / -1; }
+  .knopf { display: inline-block; background: var(--rot); color: #fff; border: 0; border-radius: 6px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+  .knopf.sekundaer { background: #fff; color: var(--text); border: 1px solid var(--linie); }
+  .knopf:disabled { opacity: .5; cursor: default; }
+  .hinweis { background: #fff8e1; border-left: 4px solid var(--gelb); padding: 10px 14px; border-radius: 6px; margin: 10px 0; font-size: 14px; }
+  .fehler { background: #fdecea; border-left-color: var(--rot); }
+  .gut { background: #e8f5e9; border-left-color: var(--gruen); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--linie); white-space: nowrap; }
+  th { background: var(--grau); font-weight: 600; }
+  tr.aus td { color: #999; text-decoration: line-through; }
+  .betrag { font-size: 34px; font-weight: 800; color: var(--gruen); }
+  .zeile { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .wochentage label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; font-size: 14px; color: var(--text); }
+  .wochentage input { width: auto; }
+  .vorschlaege { position: absolute; background: #fff; border: 1px solid var(--linie); border-radius: 6px; z-index: 5; max-height: 220px; overflow: auto; width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+  .vorschlaege div { padding: 7px 10px; cursor: pointer; }
+  .vorschlaege div:hover { background: var(--grau); }
+  .rel { position: relative; }
+  .klein { font-size: 13px; color: #666; }
+  .balken { height: 10px; background: var(--linie); border-radius: 5px; overflow: hidden; }
+  .balken div { height: 100%; background: var(--rot); transition: width .3s; }
+  pre.mail { white-space: pre-wrap; background: var(--grau); padding: 12px; border-radius: 6px; font: 13px/1.4 inherit; }
+</style>
+</head>
+<body>
+<header>Deutschlandticket-Refund <small>Fahrgastrechte-Entschädigung für Pendler</small></header>
+<main>{% block inhalt %}{% endblock %}</main>
+</body>
+</html>

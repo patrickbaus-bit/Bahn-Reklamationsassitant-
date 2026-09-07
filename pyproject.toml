@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dticket-refund"
+version = "0.1.0"
+description = "Deutschlandticket: Verspaetungen auf der Pendlerstrecke finden und Fahrgastrechte-Entschaedigung beantragen"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "jinja2",
+    "python-multipart",
+    "httpx",
+    "fpdf2",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-asyncio", "respx"]
+
+[project.scripts]
+dticket-refund = "dticket_refund.cli:main"
+
+[tool.setuptools]
+packages = ["dticket_refund", "dticket_refund.sources"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+dticket_refund = ["templates/*.html"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

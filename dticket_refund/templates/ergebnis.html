@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block inhalt %}
+<div class="karte">
+  <h2>{{ job.strecke.start.name }} ⇄ {{ job.strecke.ziel.name }} · {{ job.ticket.monat_label }}</h2>
+  {% if job.status == 'fehler' %}<div class="hinweis fehler">Die Suche ist fehlgeschlagen: {{ job.fehler|join('; ') }}</div>{% endif %}
+  <div class="zeile">
+    <div><div class="klein">Erstattungsbetrag</div><div class="betrag">{{ antrag.betrag_eur|eur }}</div></div>
+    <div class="klein" style="margin-left:24px">
+      {% if antrag.rechenweg == 'sammeln' %}Sammelregel: {{ antrag.fahrten|length }} Fahrten ab 20 min, {{ antrag.einheiten }} volle Stunden{% else %}Einzelfallregel: {{ antrag.fahrten|length }} Fälle ab 60 min{% endif %} eingereicht<br>
+      Kappung: {{ regeln.kappung_eur(antrag.ticketpreis_eur)|eur }} ({{ (regeln.kappung_anteil*100)|int }} % von {{ antrag.ticketpreis_eur|eur }})<br>
+      {{ puenktlich }} Fahrten im Zeitfenster waren pünktlich oder unter 20 min verspätet
+    </div>
+  </div>
+  {% for h in antrag.hinweise %}<div class="hinweis">{{ h }}</div>{% endfor %}
+  {% if job.fehler and job.status != 'fehler' %}<div class="hinweis">{{ job.fehler|length }} Tages-Abfragen lieferten Fehler (Datenquelle nicht erreichbar) – diese Tage fehlen ggf.</div>{% endif %}
+</div>
+
+<div class="karte">
+  <h2>Gefundene Verspätungen</h2>
+  <p class="klein">Haken entfernen bei Fahrten, die Sie an dem Tag <b>nicht</b> gefahren sind. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. Pro Tag und Richtung zählt eine Fahrt.</p>
+  <form method="post" action="/ergebnis/{{ job_id }}/abwaehlen">
+  <table>
+    <tr><th></th><th>Datum</th><th>Richtung</th><th>Zug</th><th>Von → Nach</th><th>Soll ab</th><th>Soll an</th><th>Ist an</th><th>Verspätung</th><th>Status</th></tr>
+    {% for i, f in kandidaten %}
+    <tr class="{% if i in job.abgewaehlt %}aus{% endif %}">
+      <td><input type="checkbox" name="index" value="{{ i }}" {% if i in job.abgewaehlt %}checked{% endif %} title="abwählen"></td>
+      <td>{{ f.datum|dt }} ({{ ['Mo','Di','Mi','Do','Fr','Sa','So'][f.datum.isoweekday()-1] }})</td>
+      <td>{{ 'Hin' if f.richtung == 'hin' else 'Rück' }}</td>
+      <td>{{ f.zug }}</td>
+      <td>{{ f.start }} → {{ f.ziel }}</td>
+      <td>{{ f.soll_ab|dt('%H:%M') }}</td><td>{{ f.soll_an|dt('%H:%M') }}</td>
+      <td>{% if f.ausgefallen %}{{ (f.ersatz_an|dt('%H:%M')) if f.ersatz_an else '–' }}{% else %}{{ f.ist_an|dt('%H:%M') }}{% endif %}</td>
+      <td><b>{{ f.verspaetung_min }} min</b></td>
+      <td>{% if f.ausgefallen %}Ausfall · {% endif %}{% if i in job.abgewaehlt %}gestrichen{% elif i in gewaehlt %}<b>eingereicht</b>{% else %}nicht benötigt{% endif %}</td>
+    </tr>
+    {% else %}<tr><td colspan="10">Keine Verspätung ab 20 Minuten im Zeitfenster gefunden.</td></tr>{% endfor %}
+  </table>
+  <p style="margin-top:12px"><button class="knopf sekundaer" type="submit">Auswahl übernehmen &amp; neu berechnen</button>
+  <span class="klein">Die Spalte „abwählen“ markiert Fahrten, die aus dem Antrag herausfallen.</span></p>
+  </form>
+</div>
+
+<div class="karte">
+  <h2>Antrag versenden</h2>
+  {% if antrag.betrag_eur <= 0 %}<div class="hinweis">Unter dem Mindestbetrag – ein Antrag lohnt sich für diesen Monat nicht.</div>{% endif %}
+  <div class="zeile">
+    <a class="knopf sekundaer" href="/ergebnis/{{ job_id }}/antrag.pdf">PDF herunterladen</a>
+    {% if mac %}<button class="knopf" id="mailapp" type="button">In Apple Mail öffnen (mit PDF-Anhang)</button>{% endif %}
+    <a class="knopf sekundaer" href="/ergebnis/{{ job_id }}/antrag.eml">.eml mit Anhang (Outlook/Thunderbird)</a>
+    <a class="knopf sekundaer" href="{{ mailto }}">mailto-Link (ohne Anhang)</a>
+  </div>
+  <p class="klein" id="mailstatus"></p>
+  <p class="klein">Empfänger: <b>{{ empfaenger }}</b> · Betreff: {{ betreff }}<br>
+  Tipp: Eine Kopie/Screenshot des Deutschlandtickets zusätzlich anhängen. Wurde das Ticket nicht bei der DB gekauft, ist der Verkäufer bzw. das Verkehrsunternehmen zuständig – Empfänger dann in der Mail anpassen.</p>
+  <div class="hinweis">Die DB nennt offiziell nur den Postweg (Servicecenter Fahrgastrechte, 60647 Frankfurt am Main) und das
+  <a href="{{ online_formular }}" target="_blank">Online-Formular im DB-Kundenkonto</a>. Eine Antragstellung per E-Mail ist wirksam
+  (AG Frankfurt, 29 C 599/23), läuft aber über den allgemeinen Kundendialog. Wer sicher gehen will, überträgt die Fahrten aus dem PDF
+  ins Online-Formular oder schickt das PDF per Post.</div>
+  <details><summary class="klein">Mailtext anzeigen</summary><pre class="mail">{{ mailtext }}</pre></details>
+</div>
+<p><a href="/" class="klein">← Neue Suche</a></p>
+<script>
+const k = document.getElementById('mailapp');
+if (k) k.onclick = async () => {
+  k.disabled = true; document.getElementById('mailstatus').textContent = 'Öffne Apple Mail …';
+  const r = await fetch('/ergebnis/{{ job_id }}/mail-app', {method: 'POST'}); const a = await r.json();
+  document.getElementById('mailstatus').textContent = a.ok ? 'Entwurf in Apple Mail geöffnet – nur noch auf Senden klicken.' : 'Fehler: ' + a.fehler;
+  k.disabled = false;
+};
+</script>
+{% endblock %}
