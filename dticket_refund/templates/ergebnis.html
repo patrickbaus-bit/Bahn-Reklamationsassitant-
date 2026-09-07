@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block inhalt %}
 <div class="karte">
-  <h2>{{ job.strecke.start.name }} ⇄ {{ job.strecke.ziel.name }} · {{ job.ticket.monat_label }}</h2>
+  <h2>{% for s in job.strecken %}{{ s.start.name }} {{ '→' if s.nur_hin else '⇄' }} {{ s.ziel.name }}{% if not loop.last %} · {% endif %}{% endfor %} · {{ job.ticket.monat_label }}</h2>
   {% if job.status == 'fehler' %}<div class="hinweis fehler">Die Suche ist fehlgeschlagen: {{ job.fehler|join('; ') }}</div>{% endif %}
   <div class="zeile">
     <div><div class="klein">Erstattungsbetrag</div><div class="betrag">{{ antrag.betrag_eur|eur }}</div></div>
@@ -17,7 +17,7 @@
 
 <div class="karte">
   <h2>Gefundene Verspätungen</h2>
-  <p class="klein">Haken entfernen bei Fahrten, die Sie an dem Tag <b>nicht</b> gefahren sind. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. Pro Tag und Richtung zählt eine Fahrt.</p>
+  <p class="klein">Haken setzen bei Fahrten, die Sie an dem Tag <b>nicht</b> gefahren sind. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. Pro Tag, Strecke und Richtung zählt eine Fahrt.</p>
   <form method="post" action="/ergebnis/{{ job_id }}/abwaehlen">
   <table>
     <tr><th></th><th>Datum</th><th>Richtung</th><th>Zug</th><th>Von → Nach</th><th>Soll ab</th><th>Soll an</th><th>Ist an</th><th>Verspätung</th><th>Status</th></tr>
@@ -42,7 +42,8 @@
 
 <div class="karte">
   <h2>Antrag versenden</h2>
-  {% if antrag.betrag_eur <= 0 %}<div class="hinweis">Unter dem Mindestbetrag – ein Antrag lohnt sich für diesen Monat nicht.</div>{% endif %}
+  {% if antrag.betrag_eur <= 0 %}<div class="hinweis">Unter der Bagatellgrenze – ein Antrag lohnt sich für diesen Monat nicht.</div>
+  {% elif antrag.betrag_eur < regeln.kappung_eur(antrag.ticketpreis_eur) %}<div class="hinweis">Die Kappung von {{ regeln.kappung_eur(antrag.ticketpreis_eur)|eur }} ist noch nicht erreicht. Mehr kommt nur über weitere tatsächlich gefahrene Fahrten zusammen: größeres Zeitfenster, weitere Fahrtage (Sa/So) oder eine <a href="/">zusätzliche Strecke</a> eintragen.</div>{% endif %}
   <div class="zeile">
     <a class="knopf sekundaer" href="/ergebnis/{{ job_id }}/antrag.pdf">PDF herunterladen</a>
     {% if mac %}<button class="knopf" id="mailapp" type="button">In Apple Mail öffnen (mit PDF-Anhang)</button>{% endif %}

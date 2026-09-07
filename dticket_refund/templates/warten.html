@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block inhalt %}
 <div class="karte">
-  <h2>Suche läuft: {{ job.strecke.start.name }} ⇄ {{ job.strecke.ziel.name }}, {{ job.ticket.monat_label }}</h2>
+  <h2>Suche läuft: {% for s in job.strecken %}{{ s.start.name }} ⇄ {{ s.ziel.name }}{% if not loop.last %}, {% endif %}{% endfor %} · {{ job.ticket.monat_label }}</h2>
   <div class="balken"><div id="balken" style="width:0%"></div></div>
   <p class="klein" id="text">Frage Echtzeitdaten ab …</p>
 </div>

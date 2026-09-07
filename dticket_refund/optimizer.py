@@ -1,7 +1,7 @@
 """Waehlt aus den gefundenen Verspaetungen die Menge und den Rechenweg, die den hoechsten
 Erstattungsbetrag ergeben.
 
-Pro Tag und Richtung zaehlt nur eine Fahrt (der Pendler sitzt nur in einem Zug); von
+Pro Tag, Strecke und Richtung zaehlt nur eine Fahrt (der Pendler sitzt nur in einem Zug); von
 mehreren Zuegen im Zeitfenster wird der mit der laengsten Verspaetung angenommen - der
 Nutzer streicht anschliessend, was er nicht gefahren ist.
 
@@ -23,7 +23,7 @@ def _eur(x: float) -> str:
 def _eine_pro_tag_und_richtung(fahrten: list[Fahrt]) -> list[Fahrt]:
     beste: dict[tuple, Fahrt] = {}
     for f in fahrten:
-        key = (f.datum, f.richtung)
+        key = (f.datum, f.richtung, f.start, f.ziel)
         if key not in beste or f.verspaetung_min > beste[key].verspaetung_min:
             beste[key] = f
     return list(beste.values())
@@ -48,9 +48,11 @@ def _auswahl_sammeln(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float) -
     return gewaehlt
 
 
-def optimiere(person: Person, ticket: Ticket, strecke: Pendelstrecke,
+def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pendelstrecke],
               fahrten: list[Fahrt], regeln: Regelwerk = REGELN,
               preis_eur: float | None = None) -> Antrag:
+    if isinstance(strecken, Pendelstrecke):
+        strecken = [strecken]
     preis = preis_eur if preis_eur is not None else ticketpreis(ticket.monat)
     kandidaten = [f for f in _eine_pro_tag_und_richtung(fahrten)
                   if f.verspaetung_min >= regeln.schwelle_sammeln_min]
@@ -89,6 +91,6 @@ def optimiere(person: Person, ticket: Ticket, strecke: Pendelstrecke,
         hinweise.append(
             f"{len(rest)} weitere Verspätung(en) bringen kein zusätzliches Geld, weil die Kappung von "
             f"{_eur(regeln.kappung_eur(preis))} (25 % von {_eur(preis)}) erreicht ist.")
-    return Antrag(person=person, ticket=ticket, strecke=strecke, fahrten=gewaehlt, verworfen=rest,
+    return Antrag(person=person, ticket=ticket, strecken=strecken, fahrten=gewaehlt, verworfen=rest,
                   betrag_eur=betrag, ticketpreis_eur=preis, rechenweg=rechenweg,
                   einheiten=einheiten[rechenweg], hinweise=hinweise)

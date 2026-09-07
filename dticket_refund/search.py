@@ -48,19 +48,25 @@ def ergaenze_ersatzankunft(fahrten: list[Fahrt]) -> None:
                     break
 
 
-async def suche_verspaetungen(provider: DelayProvider, ticket: Ticket, strecke: Pendelstrecke,
+async def suche_verspaetungen(provider: DelayProvider, ticket: Ticket,
+                              strecken: Pendelstrecke | list[Pendelstrecke],
                               fortschritt: Optional[Fortschritt] = None,
                               parallel: int = 4) -> tuple[list[Fahrt], list[str]]:
     """Liefert alle Fahrten im Zeitfenster (auch puenktliche) plus Fehlermeldungen."""
+    if isinstance(strecken, Pendelstrecke):
+        strecken = [strecken]
     heute = date.today()
-    tage = [t for t in strecke.fahrtage(ticket.erster_tag, ticket.letzter_tag) if t < heute]
-    auftraege = [(t, r) for t in tage for r in ("hin", "rueck")]
+    auftraege = []
+    for strecke in strecken:
+        tage = [t for t in strecke.fahrtage(ticket.erster_tag, ticket.letzter_tag) if t < heute]
+        richtungen = ("hin",) if strecke.nur_hin else ("hin", "rueck")
+        auftraege += [(strecke, t, r) for t in tage for r in richtungen]
     sem = asyncio.Semaphore(parallel)
     fehler: list[str] = []
     ergebnis: list[Fahrt] = []
     erledigt = 0
 
-    async def hole(tag: date, richtung: str):
+    async def hole(strecke: Pendelstrecke, tag: date, richtung: str):
         nonlocal erledigt
         a, b = (strecke.start, strecke.ziel) if richtung == "hin" else (strecke.ziel, strecke.start)
         async with sem:
@@ -76,6 +82,6 @@ async def suche_verspaetungen(provider: DelayProvider, ticket: Ticket, strecke: 
         if fortschritt:
             fortschritt(erledigt, len(auftraege), f"{tag:%d.%m.} {richtung}")
 
-    await asyncio.gather(*(hole(t, r) for t, r in auftraege))
+    await asyncio.gather(*(hole(s, t, r) for s, t, r in auftraege))
     ergebnis.sort(key=lambda f: (f.datum, f.soll_ab))
     return ergebnis, fehler

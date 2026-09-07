@@ -30,9 +30,12 @@ def lade_profil() -> dict:
         return {}
 
 
-def speichere_profil(person: Person, strecke: dict) -> None:
+def speichere_profil(person: Person, abonummer: str = "", strecken: list[dict] | None = None) -> None:
+    """Person, Abonummer und die zuletzt benutzten Strecken merken."""
     KONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    daten = {"person": asdict(person), "strecke": strecke}
+    alt = lade_profil()
+    daten = {"person": asdict(person), "abonummer": abonummer,
+             "strecken": strecken if strecken is not None else alt.get("strecken", [])}
     PROFIL_DATEI.write_text(json.dumps(daten, ensure_ascii=False, indent=2))
     try:
         PROFIL_DATEI.chmod(0o600)   # IBAN und Adresse: nur der Nutzer selbst

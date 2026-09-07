@@ -14,33 +14,26 @@ from .config import EMPFAENGER_EMAIL as DB_FAHRGASTRECHTE_EMAIL
 
 def betreff(antrag: Antrag) -> str:
     t = antrag.ticket
-    nr = f", Ticket-Nr. {t.ticketnummer}" if t.ticketnummer else ""
+    nr = t.abonummer or t.ticketnummer
+    nr = f", Abo-Nr. {nr}" if nr else ""
     return f"Fahrgastrechte Deutschlandticket {t.monat_label}{nr} – {antrag.person.vorname} {antrag.person.nachname}"
 
 
 def mailtext(antrag: Antrag) -> str:
-    p, t, s = antrag.person, antrag.ticket, antrag.strecke
+    p, t = antrag.person, antrag.ticket
+    betrag = f"{antrag.betrag_eur:.2f} EUR".replace(".", ",")
     zeilen = [
         "Sehr geehrte Damen und Herren,",
         "",
-        f"anbei sende ich Ihnen meinen Antrag auf Fahrgastrechte-Entschädigung für mein Deutschlandticket "
-        f"im Gültigkeitsmonat {t.monat_label}.",
-        "",
-        f"Strecke: {s.start.name} – {s.ziel.name}",
-        (f"Anzahl Verspätungsfälle ab 60 Minuten: {len(antrag.fahrten)}" if antrag.rechenweg == "einzelfall"
-         else f"Zusammengerechnete Verspätungen ab 20 Minuten: {len(antrag.fahrten)} Fahrten, "
-              f"{sum(f.verspaetung_min for f in antrag.fahrten)} Minuten = {antrag.einheiten} volle Stunden"),
-        f"Beantragter Betrag: {antrag.betrag_eur:.2f} EUR".replace(".", ","),
+        f"anbei mein Antrag auf Fahrgastrechte-Entschädigung in Höhe von {betrag} für mein Deutschlandticket "
+        f"im Gültigkeitsmonat {t.monat_label}. Die Fahrten mit Soll- und Ist-Zeiten sind im beigefügten PDF aufgeführt.",
     ]
+    if t.abonummer:
+        zeilen.append(f"Abonummer: {t.abonummer}")
     if t.ticketnummer:
-        zeilen.append(f"Ticket-/Abonummer: {t.ticketnummer}")
-    zeilen += [
-        "",
-        "Die einzelnen Fahrten mit Soll- und Ist-Zeiten entnehmen Sie bitte dem beigefügten PDF.",
-    ]
+        zeilen.append(f"Ticketnummer: {t.ticketnummer}")
     if p.iban:
-        zeilen.append(f"Bitte überweisen Sie den Betrag auf IBAN {p.iban} "
-                      f"(Kontoinhaber: {p.kontoinhaber or p.vorname + ' ' + p.nachname}).")
+        zeilen.append(f"IBAN: {p.iban} (Kontoinhaber: {p.kontoinhaber or p.vorname + ' ' + p.nachname})")
     zeilen += ["", "Mit freundlichen Grüßen", f"{p.vorname} {p.nachname}", p.strasse, f"{p.plz} {p.ort}"]
     return "\n".join(zeilen)
 

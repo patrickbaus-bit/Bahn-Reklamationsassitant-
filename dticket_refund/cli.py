@@ -24,7 +24,7 @@ async def _suche(args):
     def fortschritt(n, gesamt, was):
         print(f"\r{n}/{gesamt} {was}     ", end="", file=sys.stderr, flush=True)
 
-    fahrten, fehler = await suche_verspaetungen(standard_provider(), ticket, strecke, fortschritt)
+    fahrten, fehler = await suche_verspaetungen(standard_provider(), ticket, [strecke], fortschritt)
     print(file=sys.stderr)
     for f in fahrten:
         if f.verspaetung_min >= args.ab or f.ausgefallen:

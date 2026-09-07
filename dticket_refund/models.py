@@ -23,7 +23,8 @@ class Person:
 class Ticket:
     """Das Deutschlandticket fuer den Gueltigkeitsmonat."""
     monat: date               # immer der 1. des Monats
-    ticketnummer: str = ""    # Abo-/Auftragsnummer oder Ticketnummer
+    abonummer: str = ""       # Abo-/Auftragsnummer (bleibt ueber die Monate gleich)
+    ticketnummer: str = ""    # Ticketnummer des Monats (optional)
     ausgestellt_von: str = "DB Vertrieb GmbH"   # Verkaeufer des Tickets
 
     @property
@@ -67,6 +68,11 @@ class Pendelstrecke:
     toleranz: timedelta = timedelta(minutes=90)
     wochentage: tuple[int, ...] = (1, 2, 3, 4, 5)
     ausgeschlossene_tage: frozenset[date] = frozenset()   # Urlaub, Feiertage, Homeoffice
+    nur_hin: bool = False     # einfache Fahrt, kein Rueckweg suchen
+
+    @property
+    def label(self) -> str:
+        return f"{self.start.name} – {self.ziel.name}"
 
     def fahrtage(self, von: date, bis: date):
         tag = von
@@ -124,7 +130,7 @@ class Antrag:
     """Das fertige Ergebnis: ausgewaehlte Fahrten plus Betrag."""
     person: Person
     ticket: Ticket
-    strecke: Pendelstrecke
+    strecken: list[Pendelstrecke]
     fahrten: list[Fahrt] = field(default_factory=list)      # die eingereichten
     verworfen: list[Fahrt] = field(default_factory=list)    # >= 60 min, aber ueber der Kappung
     betrag_eur: float = 0.0

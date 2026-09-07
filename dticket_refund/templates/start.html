@@ -2,7 +2,7 @@
 {% block inhalt %}
 <form method="post" action="/suche" id="formular">
 <div class="karte">
-  <h2>1. Persönliche Daten <span class="klein">(werden lokal gespeichert, nur einmal nötig)</span></h2>
+  <h2>1. Persönliche Daten <span class="klein">{% if gespeichert %}(aus gespeichertem Profil){% else %}(einmal eingeben, dann speichern){% endif %}</span></h2>
   <div class="raster">
     <div><label>Vorname</label><input name="vorname" required value="{{ person.vorname or '' }}"></div>
     <div><label>Nachname</label><input name="nachname" required value="{{ person.nachname or '' }}"></div>
@@ -13,15 +13,18 @@
     <div><label>Geburtsdatum (optional)</label><input name="geburtsdatum" placeholder="TT.MM.JJJJ" value="{{ person.geburtsdatum or '' }}"></div>
     <div><label>IBAN für die Auszahlung</label><input name="iban" placeholder="DE.." value="{{ person.iban or '' }}"></div>
     <div><label>Kontoinhaber (falls abweichend)</label><input name="kontoinhaber" value="{{ person.kontoinhaber or '' }}"></div>
+    <div><label>Abonummer des Deutschlandtickets</label><input name="abonummer" value="{{ abonummer or '' }}" placeholder="Abo-/Auftragsnummer"></div>
   </div>
+  <p class="zeile" style="margin-top:12px"><button class="knopf sekundaer" type="button" id="profil">Profil speichern</button>
+  <span class="klein" id="profilstatus">Wird lokal in ~/.config/dticket-refund gespeichert (auch automatisch bei jeder Suche).</span></p>
 </div>
 
 <div class="karte">
-  <h2>2. Ticket</h2>
+  <h2>2. Monat</h2>
   <div class="raster">
     <div><label>Gültigkeitsmonat</label>
       <select name="monat" required>{% for wert, name in monate %}<option value="{{ wert }}">{{ name }}</option>{% endfor %}</select></div>
-    <div><label>Ticket-/Abonummer</label><input name="ticketnummer" value="{{ strecke.ticketnummer or '' }}" placeholder="steht auf dem Ticket"></div>
+    <div><label>Ticketnummer dieses Monats (optional)</label><input name="ticketnummer" placeholder="falls abweichend von der Abonummer"></div>
   </div>
   <p class="klein">Nur abgeschlossene Monate der letzten 12 Monate (Antragsfrist). Der Ticketpreis wird automatisch nach Monat gesetzt.
   Datenquelle: {{ quelle }}. Pro Monat wird einmalig eine Archivdatei (ca. 100–650 MB) geladen und lokal gespeichert
@@ -30,41 +33,50 @@
 </div>
 
 <div class="karte">
-  <h2>3. Pendlerstrecke</h2>
-  <div class="raster">
-    <div class="rel"><label>Von (Bahnhof)</label>
-      <input id="start" autocomplete="off" required value="{{ strecke.start_name or '' }}" data-ziel="start_id" data-name="start_name">
-      <input type="hidden" name="start_id" id="start_id" value="{{ strecke.start_id or '' }}">
-      <input type="hidden" name="start_name" id="start_name" value="{{ strecke.start_name or '' }}">
-      <div class="vorschlaege" id="start_v" hidden></div></div>
-    <div class="rel"><label>Nach (Bahnhof)</label>
-      <input id="ziel" autocomplete="off" required value="{{ strecke.ziel_name or '' }}" data-ziel="ziel_id" data-name="ziel_name">
-      <input type="hidden" name="ziel_id" id="ziel_id" value="{{ strecke.ziel_id or '' }}">
-      <input type="hidden" name="ziel_name" id="ziel_name" value="{{ strecke.ziel_name or '' }}">
-      <div class="vorschlaege" id="ziel_v" hidden></div></div>
-    <div><label>Hinfahrt: Abfahrt etwa um</label><input name="hin_ab" type="time" required value="{{ strecke.hin_ab or '07:30' }}"></div>
-    <div><label>Rückfahrt: Abfahrt etwa um</label><input name="rueck_ab" type="time" required value="{{ strecke.rueck_ab or '17:00' }}"></div>
-    <div><label>Zeitfenster ± Minuten</label><input name="toleranz" type="number" min="15" max="360" value="{{ strecke.toleranz or 90 }}"></div>
-    <div class="breit wochentage"><label>Pendeltage</label>
-      {% set wt = strecke.wochentage or [1,2,3,4,5] %}
-      {% for n, k in [(1,'Mo'),(2,'Di'),(3,'Mi'),(4,'Do'),(5,'Fr'),(6,'Sa'),(7,'So')] %}
-      <label><input type="checkbox" name="wochentage" value="{{ n }}" {% if n in wt %}checked{% endif %}> {{ k }}</label>{% endfor %}</div>
-    <div class="breit"><label>Nicht gefahren (Urlaub, Homeoffice, Feiertage) – Datumsliste, z.B. 2026-08-03, 2026-08-04</label>
-      <input name="frei" placeholder="JJJJ-MM-TT, JJJJ-MM-TT, ..."></div>
-  </div>
+  <h2>3. Strecken</h2>
+  <p class="klein">Die Pendlerstrecke plus bis zu zwei weitere regelmäßige Strecken (z. B. Wochenendfahrten, zweiter Arbeitsort). Alle Verspätungen ab 20 Minuten zählen zusammen; pro Tag, Strecke und Richtung wird eine Fahrt gewertet. Mit „ganzer Tag“ als Zeitfenster werden alle Züge des Tages gefunden.</p>
+  {% for st in strecken %}{% set n = loop.index %}
+  <fieldset class="strecke" id="strecke_{{ n }}" {% if n > anzahl_aktiv %}hidden{% endif %} style="border:1px solid var(--linie);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+    <legend class="klein">Strecke {{ n }}{% if n > 1 %} · <a href="#" class="entfernen" data-n="{{ n }}">entfernen</a>{% endif %}</legend>
+    <div class="raster">
+      <div class="rel"><label>Von (Bahnhof)</label>
+        <input class="bahnhof" autocomplete="off" value="{{ st.start_name or '' }}" data-id="start_id_{{ n }}" data-name="start_name_{{ n }}">
+        <input type="hidden" name="start_id_{{ n }}" id="start_id_{{ n }}" value="{{ st.start_id or '' }}">
+        <input type="hidden" name="start_name_{{ n }}" id="start_name_{{ n }}" value="{{ st.start_name or '' }}">
+        <div class="vorschlaege" hidden></div></div>
+      <div class="rel"><label>Nach (Bahnhof)</label>
+        <input class="bahnhof" autocomplete="off" value="{{ st.ziel_name or '' }}" data-id="ziel_id_{{ n }}" data-name="ziel_name_{{ n }}">
+        <input type="hidden" name="ziel_id_{{ n }}" id="ziel_id_{{ n }}" value="{{ st.ziel_id or '' }}">
+        <input type="hidden" name="ziel_name_{{ n }}" id="ziel_name_{{ n }}" value="{{ st.ziel_name or '' }}">
+        <div class="vorschlaege" hidden></div></div>
+      <div><label>Hinfahrt: Abfahrt etwa um</label><input name="hin_ab_{{ n }}" type="time" value="{{ st.hin_ab or '07:30' }}"></div>
+      <div><label>Rückfahrt: Abfahrt etwa um</label><input name="rueck_ab_{{ n }}" type="time" value="{{ st.rueck_ab or '17:00' }}"></div>
+      <div><label>Zeitfenster</label>
+        <select name="toleranz_{{ n }}">{% for t, k in [(30,'± 30 min'),(60,'± 1 Std.'),(90,'± 1,5 Std.'),(120,'± 2 Std.'),(180,'± 3 Std.'),(720,'ganzer Tag')] %}
+          <option value="{{ t }}" {% if (st.toleranz or 90) == t %}selected{% endif %}>{{ k }}</option>{% endfor %}</select></div>
+      <div class="breit wochentage"><label>Fahrtage</label>
+        {% set wt = st.wochentage or [1,2,3,4,5] %}
+        {% for w, k in wochentage_liste %}<label><input type="checkbox" name="wochentage_{{ n }}" value="{{ w }}" {% if w in wt %}checked{% endif %}> {{ k }}</label>{% endfor %}
+        <label style="margin-left:16px"><input type="checkbox" name="nur_hin_{{ n }}" value="1" {% if st.nur_hin %}checked{% endif %}> nur Hinfahrt</label></div>
+      <div class="breit"><label>Nicht gefahren (Urlaub, Homeoffice, Feiertage): Datumsliste JJJJ-MM-TT, kommagetrennt</label>
+        <input name="frei_{{ n }}" value="{{ st.frei or '' }}" placeholder="2026-08-03, 2026-08-04"></div>
+    </div>
+  </fieldset>
+  {% endfor %}
+  <p><button class="knopf sekundaer" type="button" id="mehr" {% if anzahl_aktiv >= strecken|length %}hidden{% endif %}>+ weitere Strecke</button></p>
   <p class="klein">Es werden nur Direktverbindungen im Nahverkehr (RE/RB/S-Bahn) gesucht. Bitte anschließend nur Fahrten einreichen, die Sie wirklich gefahren sind.</p>
 </div>
 
 <div class="zeile">
   <button class="knopf" type="submit">Verspätungen suchen</button>
-  <span class="klein">{{ "%.2f"|format(regeln.pauschale_eur) }} EUR je Fall ab {{ regeln.schwelle_einzelfall_min }} min oder je volle Stunde aus gesammelten Verspätungen ab {{ regeln.schwelle_sammeln_min }} min; Bagatellgrenze {{ "%.2f"|format(regeln.bagatellgrenze_eur) }} EUR; Kappung {{ (regeln.kappung_anteil*100)|int }} % des Ticketpreises. Es wird automatisch der Rechenweg mit dem höheren Betrag gewählt.</span>
+  <span class="klein">{{ "%.2f"|format(regeln.pauschale_eur) }} EUR je Fall ab {{ regeln.schwelle_einzelfall_min }} min oder je volle Stunde aus gesammelten Verspätungen ab {{ regeln.schwelle_sammeln_min }} min; Bagatellgrenze {{ "%.2f"|format(regeln.bagatellgrenze_eur) }} EUR; Kappung {{ (regeln.kappung_anteil*100)|int }} % des Ticketpreises.</span>
 </div>
 </form>
 
 <script>
-for (const feld of [document.getElementById('start'), document.getElementById('ziel')]) {
-  const box = document.getElementById(feld.id + '_v');
-  const idFeld = document.getElementById(feld.dataset.ziel), nameFeld = document.getElementById(feld.dataset.name);
+function autocomplete(feld) {
+  const box = feld.parentElement.querySelector('.vorschlaege');
+  const idFeld = document.getElementById(feld.dataset.id), nameFeld = document.getElementById(feld.dataset.name);
   let timer;
   feld.addEventListener('input', () => {
     idFeld.value = ''; nameFeld.value = '';
@@ -84,6 +96,22 @@ for (const feld of [document.getElementById('start'), document.getElementById('z
   });
   feld.addEventListener('blur', () => setTimeout(() => box.hidden = true, 200));
 }
+document.querySelectorAll('.bahnhof').forEach(autocomplete);
+
+const bloecke = [...document.querySelectorAll('.strecke')];
+function zeigeMehrKnopf() { document.getElementById('mehr').hidden = bloecke.every(b => !b.hidden); }
+document.getElementById('mehr').onclick = () => { const b = bloecke.find(b => b.hidden); if (b) b.hidden = false; zeigeMehrKnopf(); };
+document.querySelectorAll('.entfernen').forEach(a => a.onclick = e => {
+  e.preventDefault(); const b = document.getElementById('strecke_' + a.dataset.n);
+  b.querySelectorAll('input[type=text],input:not([type]),input[type=hidden]').forEach(i => i.value = '');
+  b.hidden = true; zeigeMehrKnopf();
+});
+
+document.getElementById('profil').onclick = async () => {
+  const r = await fetch('/profil', {method: 'POST', body: new FormData(document.getElementById('formular'))});
+  document.getElementById('profilstatus').textContent = r.ok ? 'Profil gespeichert.' : 'Speichern fehlgeschlagen.';
+};
+
 async function archivTick() {
   try {
     const r = await fetch('/api/archiv'); const a = await r.json();
@@ -95,10 +123,12 @@ async function archivTick() {
   } catch (e) { setTimeout(archivTick, 3000); }
 }
 archivTick();
+
 document.getElementById('formular').addEventListener('submit', e => {
-  for (const id of ['start_id', 'ziel_id']) {
-    if (!document.getElementById(id).value) { e.preventDefault(); alert('Bitte Bahnhöfe aus der Vorschlagsliste auswählen.'); return; }
-  }
+  const ok = bloecke.some(b => !b.hidden && b.querySelector('[name^=start_id]').value && b.querySelector('[name^=ziel_id]').value);
+  const halb = bloecke.some(b => !b.hidden && (b.querySelector('.bahnhof').value || b.querySelectorAll('.bahnhof')[1].value)
+                && !(b.querySelector('[name^=start_id]').value && b.querySelector('[name^=ziel_id]').value));
+  if (!ok || halb) { e.preventDefault(); alert('Bitte Bahnhöfe aus der Vorschlagsliste auswählen (Strecke unvollständig).'); }
 });
 </script>
 {% endblock %}

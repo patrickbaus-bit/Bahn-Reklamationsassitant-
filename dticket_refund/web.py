@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
@@ -50,7 +50,7 @@ templates.env.filters["dt"] = lambda d, fmt="%d.%m.%Y": d.strftime(fmt) if d els
 class Job:
     ticket: Ticket
     person: Person
-    strecke: Pendelstrecke
+    strecken: list[Pendelstrecke]
     erledigt: int = 0
     gesamt: int = 0
     status: str = "laeuft"
@@ -76,11 +76,18 @@ def _monate_zur_auswahl() -> list[tuple[str, str]]:
     return monate
 
 
+MAX_STRECKEN = 3
+WOCHENTAGE = [(1, "Mo"), (2, "Di"), (3, "Mi"), (4, "Do"), (5, "Fr"), (6, "Sa"), (7, "So")]
+
+
 @app.get("/", response_class=HTMLResponse)
 async def start(request: Request):
     profil = config.lade_profil()
+    strecken = profil.get("strecken") or []
     return templates.TemplateResponse(request, "start.html", {
-        "person": profil.get("person", {}), "strecke": profil.get("strecke", {}),
+        "person": profil.get("person", {}), "abonummer": profil.get("abonummer", ""),
+        "strecken": strecken + [{}] * (MAX_STRECKEN - len(strecken)), "anzahl_aktiv": max(1, len(strecken)),
+        "wochentage_liste": WOCHENTAGE, "gespeichert": bool(profil),
         "monate": _monate_zur_auswahl(), "regeln": REGELN,
         "archiv_monate": [m.isoformat() for m in standard_provider().vorhandene_monate()],
         "quelle": standard_provider().name,
@@ -104,32 +111,54 @@ async def archiv_status():
             "stationen_bereit": standard_stationen().bereit()}
 
 
+def _person_aus(form) -> Person:
+    g = lambda k: (form.get(k) or "").strip()
+    return Person(g("vorname"), g("nachname"), g("strasse"), g("plz"), g("ort"), g("email"),
+                  iban=g("iban").replace(" ", "").upper(), kontoinhaber=g("kontoinhaber"),
+                  geburtsdatum=g("geburtsdatum"))
+
+
+def _strecken_aus(form) -> tuple[list[Pendelstrecke], list[dict]]:
+    """Liest bis zu MAX_STRECKEN nummerierte Streckenbloecke; leere Bloecke werden uebersprungen."""
+    strecken, roh = [], []
+    for n in range(1, MAX_STRECKEN + 1):
+        g = lambda k, n=n: (form.get(f"{k}_{n}") or "").strip()
+        if not (g("start_id") and g("ziel_id")):
+            continue
+        wochentage = tuple(sorted({int(x) for x in form.getlist(f"wochentage_{n}")})) or (1, 2, 3, 4, 5)
+        frei = frozenset(date.fromisoformat(t.strip()) for t in g("frei").replace("\n", ",").split(",") if t.strip())
+        toleranz = max(15, min(720, int(g("toleranz") or 90)))
+        d = {"start_id": g("start_id"), "start_name": g("start_name"), "ziel_id": g("ziel_id"),
+             "ziel_name": g("ziel_name"), "hin_ab": g("hin_ab") or "07:30", "rueck_ab": g("rueck_ab") or "17:00",
+             "toleranz": toleranz, "wochentage": list(wochentage), "nur_hin": bool(g("nur_hin")), "frei": g("frei")}
+        roh.append(d)
+        strecken.append(Pendelstrecke(Station(d["start_id"], d["start_name"]), Station(d["ziel_id"], d["ziel_name"]),
+                                      hin_ab=d["hin_ab"], rueck_ab=d["rueck_ab"], toleranz=timedelta(minutes=toleranz),
+                                      wochentage=wochentage, ausgeschlossene_tage=frei, nur_hin=d["nur_hin"]))
+    return strecken, roh
+
+
+@app.post("/profil")
+async def profil_speichern(request: Request):
+    """Expliziter 'Profil speichern'-Knopf (die Suche speichert ebenfalls)."""
+    form = await request.form()
+    _, roh = _strecken_aus(form)
+    config.speichere_profil(_person_aus(form), (form.get("abonummer") or "").strip(), roh or None)
+    return {"ok": True}
+
+
 @app.post("/suche")
-async def suche(request: Request,
-                vorname: str = Form(...), nachname: str = Form(...), strasse: str = Form(...),
-                plz: str = Form(...), ort: str = Form(...), email: str = Form(...),
-                iban: str = Form(""), kontoinhaber: str = Form(""), geburtsdatum: str = Form(""),
-                ticketnummer: str = Form(""), monat: str = Form(...),
-                start_id: str = Form(...), start_name: str = Form(...),
-                ziel_id: str = Form(...), ziel_name: str = Form(...),
-                hin_ab: str = Form("07:30"), rueck_ab: str = Form("17:00"),
-                toleranz: int = Form(90), wochentage: list[int] = Form([1, 2, 3, 4, 5]),
-                frei: str = Form("")):
-    person = Person(vorname.strip(), nachname.strip(), strasse.strip(), plz.strip(), ort.strip(),
-                    email.strip(), iban=iban.replace(" ", "").upper(), kontoinhaber=kontoinhaber.strip(),
-                    geburtsdatum=geburtsdatum.strip())
-    frei_tage = frozenset(date.fromisoformat(t.strip()) for t in frei.replace("\n", ",").split(",") if t.strip())
-    strecke = Pendelstrecke(Station(start_id, start_name), Station(ziel_id, ziel_name),
-                            hin_ab=hin_ab, rueck_ab=rueck_ab, toleranz=timedelta(minutes=toleranz),
-                            wochentage=tuple(sorted(set(wochentage))), ausgeschlossene_tage=frei_tage)
-    ticket = Ticket(monat=date.fromisoformat(monat), ticketnummer=ticketnummer.strip())
-    config.speichere_profil(person, {
-        "start_id": start_id, "start_name": start_name, "ziel_id": ziel_id, "ziel_name": ziel_name,
-        "hin_ab": hin_ab, "rueck_ab": rueck_ab, "toleranz": toleranz, "wochentage": list(strecke.wochentage),
-        "ticketnummer": ticketnummer.strip(),
-    })
+async def suche(request: Request):
+    form = await request.form()
+    person = _person_aus(form)
+    strecken, roh = _strecken_aus(form)
+    if not strecken:
+        raise HTTPException(400, "Bitte mindestens eine Strecke mit Bahnhöfen aus der Vorschlagsliste angeben.")
+    ticket = Ticket(monat=date.fromisoformat(form["monat"]), abonummer=(form.get("abonummer") or "").strip(),
+                    ticketnummer=(form.get("ticketnummer") or "").strip())
+    config.speichere_profil(person, ticket.abonummer, roh)
     job_id = secrets.token_urlsafe(8)
-    job = Job(ticket=ticket, person=person, strecke=strecke)
+    job = Job(ticket=ticket, person=person, strecken=strecken)
     JOBS[job_id] = job
     asyncio.create_task(_laufe(job))
     return RedirectResponse(f"/ergebnis/{job_id}", status_code=303)
@@ -139,7 +168,7 @@ async def _laufe(job: Job):
     def fortschritt(n, gesamt, _):
         job.erledigt, job.gesamt = n, gesamt
     try:
-        job.alle, job.fehler = await suche_verspaetungen(standard_provider(), job.ticket, job.strecke, fortschritt)
+        job.alle, job.fehler = await suche_verspaetungen(standard_provider(), job.ticket, job.strecken, fortschritt)
         _berechne(job)
         job.status = "fertig"
     except Exception as e:
@@ -150,7 +179,7 @@ async def _laufe(job: Job):
 
 def _berechne(job: Job):
     fahrten = [f for i, f in enumerate(job.alle) if i not in job.abgewaehlt]
-    job.antrag = optimiere(job.person, job.ticket, job.strecke, fahrten)
+    job.antrag = optimiere(job.person, job.ticket, job.strecken, fahrten)
     job.antrag.hinweise.extend(job.fehler[:5])
     job.pdf = erzeuge_pdf(job.antrag)
 
@@ -185,10 +214,11 @@ async def ergebnis(request: Request, job_id: str):
 
 
 @app.post("/ergebnis/{job_id}/abwaehlen")
-async def abwaehlen(job_id: str, index: list[int] = Form([])):
+async def abwaehlen(request: Request, job_id: str):
     """Der Nutzer streicht Fahrten, die er nicht gefahren ist (nur echte Fahrten einreichen!)."""
     j = _job(job_id)
-    j.abgewaehlt = set(index)
+    form = await request.form()
+    j.abgewaehlt = {int(i) for i in form.getlist("index")}
     _berechne(j)
     return RedirectResponse(f"/ergebnis/{job_id}", status_code=303)
 

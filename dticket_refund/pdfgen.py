@@ -51,7 +51,8 @@ def _zeile(pdf: FPDF, label: str, wert: str):
 
 def erzeuge_pdf(antrag: Antrag, heute: date | None = None) -> bytes:
     heute = heute or date.today()
-    p, t, s = antrag.person, antrag.ticket, antrag.strecke
+    p, t = antrag.person, antrag.ticket
+    strecken = " sowie ".join(s.label for s in antrag.strecken) or "meinen regelmäßigen Strecken"
     pdf = _Pdf()
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=18)
@@ -71,18 +72,19 @@ def erzeuge_pdf(antrag: Antrag, heute: date | None = None) -> bytes:
     pdf.ln(4)
 
     _abschnitt(pdf, f"Entschädigung für Verspätungen im Gültigkeitsmonat {t.monat_label}")
+    betrag = f"{antrag.betrag_eur:.2f} EUR".replace(".", ",")
     if antrag.rechenweg == "sammeln":
-        regel = ("Ich mache von der Möglichkeit nach Teil C Nr. 8.1 der Tarifbedingungen des Deutschlandtarifs "
-                 "Gebrauch, wiederholte Verspätungsfälle ab 20 Minuten innerhalb der Geltungsdauer "
-                 "zusammenzurechnen; je volle 60 Minuten Verspätung beantrage ich 1,50 EUR.")
+        regel = ("Ich rechne dabei gemäß Teil C Nr. 8.1 der Tarifbedingungen des Deutschlandtarifs die "
+                 "wiederholten Verspätungsfälle ab 20 Minuten innerhalb der Geltungsdauer zusammen "
+                 "(1,50 EUR je volle 60 Minuten).")
     else:
-        regel = ("Für jeden Einzelfall mit mindestens 60 Minuten Verspätung am Zielbahnhof beantrage ich die "
-                 "pauschale Entschädigung von 1,50 EUR (Teil C Nr. 8.1 der Tarifbedingungen des Deutschlandtarifs).")
+        regel = ("Grundlage ist die pauschale Entschädigung von 1,50 EUR je Fall ab 60 Minuten Verspätung "
+                 "am Zielbahnhof (Teil C Nr. 8.1 der Tarifbedingungen des Deutschlandtarifs).")
     pdf.multi_cell(0, 5, _t(
         "Sehr geehrte Damen und Herren,\n\n"
         f"ich bin Inhaber(in) eines Deutschlandtickets (Zeitkarte des Nahverkehrs, 2. Klasse) und beantrage "
-        f"gesammelt für den abgelaufenen Gültigkeitsmonat die Entschädigung für die unten aufgeführten Fahrten "
-        f"auf meiner regelmäßigen Pendelstrecke {s.start.name} – {s.ziel.name}. {regel}"))
+        f"gesammelt für den abgelaufenen Gültigkeitsmonat eine Entschädigung in Höhe von {betrag} für die "
+        f"unten aufgeführten Fahrten auf {strecken}. {regel}"))
     pdf.ln(3)
 
     _abschnitt(pdf, "Antragsteller(in)")
@@ -96,7 +98,12 @@ def erzeuge_pdf(antrag: Antrag, heute: date | None = None) -> bytes:
     _abschnitt(pdf, "Ticket")
     _zeile(pdf, "Ticket", "Deutschlandticket")
     _zeile(pdf, "Gültigkeitsmonat", t.monat_label)
-    _zeile(pdf, "Ticket-/Abonummer", t.ticketnummer or "– (siehe Anlage)")
+    if t.abonummer:
+        _zeile(pdf, "Abonummer", t.abonummer)
+    if t.ticketnummer:
+        _zeile(pdf, "Ticketnummer", t.ticketnummer)
+    if not (t.abonummer or t.ticketnummer):
+        _zeile(pdf, "Ticket-/Abonummer", "– (siehe Anlage)")
     _zeile(pdf, "Ausgestellt von", t.ausgestellt_von)
     _zeile(pdf, "Ticketpreis", f"{antrag.ticketpreis_eur:.2f} EUR".replace(".", ","))
     pdf.ln(2)
@@ -121,16 +128,7 @@ def erzeuge_pdf(antrag: Antrag, heute: date | None = None) -> bytes:
     pdf.ln(3)
 
     _abschnitt(pdf, "Beantragte Entschädigung")
-    kappung = f"{antrag.ticketpreis_eur * 0.25:.2f} EUR".replace(".", ",")
-    if antrag.rechenweg == "sammeln":
-        minuten = sum(f.verspaetung_min for f in antrag.fahrten)
-        _zeile(pdf, "Berechnung", f"{minuten} Minuten gesamt = {antrag.einheiten} volle Stunden x 1,50 EUR "
-                                  f"= {antrag.einheiten * 1.5:.2f} EUR".replace(".", ","))
-    else:
-        _zeile(pdf, "Berechnung", f"{antrag.einheiten} Einzelfälle x 1,50 EUR "
-                                  f"= {antrag.einheiten * 1.5:.2f} EUR".replace(".", ","))
-    _zeile(pdf, "Kappung", f"max. 25 % des Ticketpreises = {kappung}")
-    _zeile(pdf, "Betrag", f"{antrag.betrag_eur:.2f} EUR".replace(".", ","))
+    _zeile(pdf, "Betrag", betrag)
     if p.iban:
         _zeile(pdf, "Auszahlung", f"Überweisung auf IBAN {p.iban}")
         _zeile(pdf, "Kontoinhaber", p.kontoinhaber or f"{p.vorname} {p.nachname}")
@@ -150,13 +148,5 @@ def erzeuge_pdf(antrag: Antrag, heute: date | None = None) -> bytes:
     pdf.set_font("Helvetica", "", 8)
     pdf.cell(80, 4, _t(f"{p.vorname} {p.nachname}"))
     pdf.ln(6)
-
-    if antrag.verworfen:
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(110)
-        pdf.multi_cell(0, 4, _t(
-            f"Hinweis (nicht Teil des Antrags): {len(antrag.verworfen)} weitere Verspätungen ab 20 min wurden "
-            f"ermittelt, sind aber nach dem gewählten Rechenweg bzw. wegen der Kappung nicht mehr erstattungsrelevant."))
-        pdf.set_text_color(0)
 
     return bytes(pdf.output())

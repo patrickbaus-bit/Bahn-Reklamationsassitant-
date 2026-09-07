@@ -9,7 +9,7 @@ from dticket_refund.pdfgen import erzeuge_pdf
 def _antrag():
     person = Person("Erika", "Mustermann", "Heidestr. 17", "51147", "Köln", "erika@example.org",
                     iban="DE02120300000000202051")
-    ticket = Ticket(monat=date(2026, 8, 1), ticketnummer="DT-4711")
+    ticket = Ticket(monat=date(2026, 8, 1), abonummer="DT-4711")
     strecke = Pendelstrecke(Station("8000105", "Frankfurt(Main)Hbf"), Station("8000068", "Darmstadt Hbf"))
     fahrten = []
     for tag in (3, 4, 5, 10):
@@ -19,7 +19,7 @@ def _antrag():
                              ab, an, ist_an=an + timedelta(minutes=64 + tag)))
     fahrten.append(Fahrt(date(2026, 8, 11), "rueck", "RB 68", "Darmstadt Hbf", "Frankfurt(Main)Hbf",
                          datetime(2026, 8, 11, 17, 5), datetime(2026, 8, 11, 17, 30), ausgefallen=True))
-    return Antrag(person, ticket, strecke, fahrten=fahrten, betrag_eur=7.5, ticketpreis_eur=63.0, einheiten=5)
+    return Antrag(person, ticket, [strecke], fahrten=fahrten, betrag_eur=7.5, ticketpreis_eur=63.0, einheiten=5)
 
 
 def test_pdf_wird_erzeugt():
@@ -31,6 +31,7 @@ def test_mail_bausteine():
     a = _antrag()
     assert "August 2026" in betreff(a) and "DT-4711" in betreff(a)
     assert "7,50 EUR" in mailtext(a) and "DE02120300000000202051" in mailtext(a)
+    assert "Kappung" not in mailtext(a) and "Stunden" not in mailtext(a) and len(mailtext(a).splitlines()) <= 12
     assert mailto_link(a).startswith("mailto:zentralerkundendialog@bahn.de?subject=")
     assert pdf_dateiname(a) == "Fahrgastrechte_Deutschlandticket_2026-08_Mustermann.pdf"
 
