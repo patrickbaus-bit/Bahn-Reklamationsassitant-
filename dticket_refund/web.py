@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 import secrets
 import sys
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -25,18 +25,22 @@ from .search import suche_verspaetungen
 from .sources import standard_provider, standard_stationen
 
 log = logging.getLogger(__name__)
-app = FastAPI(title="Deutschlandticket-Refund")
 
 
-@app.on_event("startup")
-async def _vorbereiten():
+@asynccontextmanager
+async def _lebenszyklus(app: FastAPI):
     """Bahnhofsliste (und dafuer den letzten abgeschlossenen Monat) im Hintergrund laden."""
     async def lauf():
         try:
             await standard_stationen().vorbereiten()
         except Exception as e:
             log.warning("Bahnhofsliste konnte nicht vorbereitet werden: %s", e)
-    asyncio.create_task(lauf())
+    aufgabe = asyncio.create_task(lauf())
+    yield
+    aufgabe.cancel()
+
+
+app = FastAPI(title="Deutschlandticket-Refund", lifespan=_lebenszyklus)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["eur"] = lambda x: f"{x:.2f} EUR".replace(".", ",")
 templates.env.filters["dt"] = lambda d, fmt="%d.%m.%Y": d.strftime(fmt) if d else "–"
