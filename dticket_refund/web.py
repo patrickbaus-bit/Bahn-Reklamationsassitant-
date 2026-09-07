@@ -202,9 +202,11 @@ async def ergebnis(request: Request, job_id: str):
     if j.status == "laeuft":
         return templates.TemplateResponse(request, "warten.html", {"job_id": job_id, "job": j})
     kandidaten = [(i, f) for i, f in enumerate(j.alle) if f.sammelbar]
+    a = j.antrag
+    gruppe = lambda liste: {i for i, f in enumerate(j.alle) if any(f is g for g in liste)}
     return templates.TemplateResponse(request, "ergebnis.html", {
-        "job_id": job_id, "job": j, "antrag": j.antrag, "kandidaten": kandidaten,
-        "gewaehlt": {i for i, f in enumerate(j.alle) if j.antrag and any(f is g for g in j.antrag.fahrten)},
+        "job_id": job_id, "job": j, "antrag": a, "kandidaten": kandidaten,
+        "gewaehlt": gruppe(a.fahrten) if a else set(), "reserve": gruppe(a.reserve) if a else set(),
         "regeln": REGELN, "mailto": mailto_link(j.antrag, config.EMPFAENGER_EMAIL) if j.antrag else "",
         "empfaenger": config.EMPFAENGER_EMAIL, "online_formular": config.ONLINE_FORMULAR_URL,
         "betreff": betreff(j.antrag) if j.antrag else "",

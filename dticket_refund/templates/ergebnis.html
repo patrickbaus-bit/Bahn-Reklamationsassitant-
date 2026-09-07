@@ -17,13 +17,11 @@
 
 <div class="karte">
   <h2>Gefundene Verspätungen</h2>
-  <p class="klein">Haken setzen bei Fahrten, die Sie an dem Tag <b>nicht</b> gefahren sind. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. Pro Tag, Strecke und Richtung zählt eine Fahrt.</p>
+  <p class="klein">Haken setzen bei Fahrten, die Sie an dem Tag <b>nicht</b> gefahren sind, dann neu berechnen: die Reserve rückt nach. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. Pro Tag höchstens eine Hin- und eine Rückfahrt (Rückfahrt erst nach Ankunft, gleiche Strecke); die Auswahl ist möglichst weit über den Monat verteilt.</p>
   <form method="post" action="/ergebnis/{{ job_id }}/abwaehlen">
-  <table>
-    <tr><th></th><th>Datum</th><th>Richtung</th><th>Zug</th><th>Von → Nach</th><th>Soll ab</th><th>Soll an</th><th>Ist an</th><th>Verspätung</th><th>Status</th></tr>
-    {% for i, f in kandidaten %}
+  {% macro zeile(i, f, status) %}
     <tr class="{% if i in job.abgewaehlt %}aus{% endif %}">
-      <td><input type="checkbox" name="index" value="{{ i }}" {% if i in job.abgewaehlt %}checked{% endif %} title="abwählen"></td>
+      <td><input type="checkbox" name="index" value="{{ i }}" {% if i in job.abgewaehlt %}checked{% endif %} title="nicht gefahren"></td>
       <td>{{ f.datum|dt }} ({{ ['Mo','Di','Mi','Do','Fr','Sa','So'][f.datum.isoweekday()-1] }})</td>
       <td>{{ 'Hin' if f.richtung == 'hin' else 'Rück' }}</td>
       <td>{{ f.zug }}</td>
@@ -31,12 +29,29 @@
       <td>{{ f.soll_ab|dt('%H:%M') }}</td><td>{{ f.soll_an|dt('%H:%M') }}</td>
       <td>{% if f.ausgefallen %}{{ (f.ersatz_an|dt('%H:%M')) if f.ersatz_an else '–' }}{% else %}{{ f.ist_an|dt('%H:%M') }}{% endif %}</td>
       <td><b>{{ f.verspaetung_min }} min</b></td>
-      <td>{% if f.ausgefallen %}Ausfall · {% endif %}{% if i in job.abgewaehlt %}gestrichen{% elif i in gewaehlt %}<b>eingereicht</b>{% else %}nicht benötigt{% endif %}</td>
+      <td>{% if f.ausgefallen %}Ausfall · {% endif %}{% if i in job.abgewaehlt %}gestrichen{% else %}{{ status }}{% endif %}</td>
     </tr>
-    {% else %}<tr><td colspan="10">Keine Verspätung ab 20 Minuten im Zeitfenster gefunden.</td></tr>{% endfor %}
+  {% endmacro %}
+  {% set kopf %}<tr><th></th><th>Datum</th><th>Richtung</th><th>Zug</th><th>Von → Nach</th><th>Soll ab</th><th>Soll an</th><th>Ist an</th><th>Verspätung</th><th>Status</th></tr>{% endset %}
+
+  <h3 class="klein" style="margin:12px 0 4px">Eingereicht ({{ gewaehlt|length }})</h3>
+  <table>{{ kopf }}
+    {% for i, f in kandidaten if i in gewaehlt %}{{ zeile(i, f, '<b>eingereicht</b>'|safe) }}
+    {% else %}<tr><td colspan="10">Keine einreichbare Verspätung im Zeitfenster gefunden.</td></tr>{% endfor %}
   </table>
-  <p style="margin-top:12px"><button class="knopf sekundaer" type="submit">Auswahl übernehmen &amp; neu berechnen</button>
-  <span class="klein">Die Spalte „abwählen“ markiert Fahrten, die aus dem Antrag herausfallen.</span></p>
+
+  {% if reserve %}
+  <h3 class="klein" style="margin:16px 0 4px">Reserve ({{ reserve|length }}) – rückt nach, wenn Sie oben etwas streichen</h3>
+  <table>{{ kopf }}{% for i, f in kandidaten if i in reserve %}{{ zeile(i, f, 'Reserve') }}{% endfor %}</table>
+  {% endif %}
+
+  {% set verworfen = kandidaten|rejectattr(0, 'in', gewaehlt)|rejectattr(0, 'in', reserve)|list %}
+  {% if verworfen %}
+  <details style="margin-top:14px"><summary class="klein">Verworfen ({{ verworfen|length }}): nicht benötigt oder unplausibel (zweite Fahrt gleicher Richtung am selben Tag, Rückfahrt vor Ankunft)</summary>
+  <table>{{ kopf }}{% for i, f in verworfen %}{{ zeile(i, f, 'verworfen') }}{% endfor %}</table></details>
+  {% endif %}
+
+  <p style="margin-top:12px"><button class="knopf sekundaer" type="submit">Auswahl übernehmen &amp; neu berechnen</button></p>
   </form>
 </div>
 

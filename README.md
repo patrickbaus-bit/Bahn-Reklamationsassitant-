@@ -39,9 +39,18 @@ Terminal-Variante zum Testen der Datenquelle:
 | Ticketpreis | 49 EUR (05/2023–12/2024), 58 EUR (2025), 63 EUR (2026) |
 | Frist | Beschwerde binnen 3 Monaten (Art. 28 VO 2021/782); DB akzeptiert 12 Monate; Verjährung 1 Jahr |
 
-Die App berechnet beide Rechenwege und nimmt den mit dem höheren Betrag. Pro Tag und Richtung
-zählt eine Fahrt. Bei Zugausfällen wird die Ankunft mit dem nächsten gefahrenen Zug angesetzt,
-ohne Folgezug pauschal 60 Minuten.
+Die App berechnet beide Rechenwege und nimmt den mit dem höheren Betrag. Bei Zugausfällen wird
+die Ankunft mit dem nächsten gefahrenen Zug angesetzt, ohne Folgezug pauschal 60 Minuten.
+
+Auswahl der Fahrten (`optimizer.py`):
+
+- Plausibilität: pro Tag höchstens eine Hin- und eine Rückfahrt; die Rückfahrt fährt erst nach
+  der tatsächlichen Ankunft der Hinfahrt ab und gehört zur selben Strecke.
+- Verteilung: gewählt wird jeweils die Fahrt mit dem größten Tagesabstand zur bisherigen Auswahl
+  (bei Gleichstand die längere Verspätung), bis die Kappung erreicht ist.
+- Umfang: eingereicht wird nur, was für den Betrag nötig ist; zehn weitere Fahrten stehen als
+  Reserve bereit und rücken nach, wenn der Nutzer eingereichte Fahrten streicht. Alles andere
+  wird verworfen.
 
 ## Empfänger
 

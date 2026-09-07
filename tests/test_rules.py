@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from dticket_refund.models import Fahrt, Pendelstrecke, Person, Station, Ticket
-from dticket_refund.optimizer import optimiere
+from dticket_refund.optimizer import optimiere, vertraeglich
 from dticket_refund.rules import REGELN, ticketpreis
 
 
@@ -29,9 +29,11 @@ def test_zwei_rechenwege():
 
 
 def _fahrt(tag, richtung, minuten, ausgefallen=False):
-    soll_ab = datetime(2026, 8, tag, 7, 30)
-    soll_an = datetime(2026, 8, tag, 8, 15)
-    return Fahrt(datum=date(2026, 8, tag), richtung=richtung, zug="RE 1", start="A", ziel="B",
+    stunde = 7 if richtung == "hin" else 17
+    soll_ab = datetime(2026, 8, tag, stunde, 30)
+    soll_an = datetime(2026, 8, tag, stunde + 1, 15)
+    a, b = ("A", "B") if richtung == "hin" else ("B", "A")
+    return Fahrt(datum=date(2026, 8, tag), richtung=richtung, zug="RE 1", start=a, ziel=b,
                  soll_ab=soll_ab, soll_an=soll_an,
                  ist_an=None if ausgefallen else soll_an + timedelta(minutes=minuten),
                  ausgefallen=ausgefallen)
@@ -44,7 +46,7 @@ def _rahmen():
     return person, ticket, strecke
 
 
-def test_optimierer_nimmt_eine_fahrt_pro_tag_und_richtung_und_kappt():
+def test_optimierer_eine_fahrt_pro_tag_und_richtung_und_kappt():
     fahrten = [_fahrt(1, "hin", 70), _fahrt(1, "hin", 95), _fahrt(1, "rueck", 61)]
     fahrten += [_fahrt(t, "hin", 60 + t) for t in range(2, 20)]     # 18 weitere Tage
     fahrten.append(_fahrt(20, "hin", 19))                           # zu wenig, auch zum Sammeln
@@ -54,12 +56,14 @@ def test_optimierer_nimmt_eine_fahrt_pro_tag_und_richtung_und_kappt():
     assert len(antrag.fahrten) == 11
     assert antrag.betrag_eur == 15.75
     assert antrag.ticketpreis_eur == 63.0
-    # Die laengsten Verspaetungen werden bevorzugt: 95 min statt 70 min am 1.8.
-    am_ersten = [f for f in antrag.fahrten if f.datum == date(2026, 8, 1) and f.richtung == "hin"]
+    # Am 1.8. nur eine Hinfahrt, und zwar die laengere
+    am_ersten = [f for f in antrag.fahrten + antrag.reserve if f.datum == date(2026, 8, 1) and f.richtung == "hin"]
     assert len(am_ersten) == 1 and am_ersten[0].verspaetung_min == 95
     assert antrag.fahrten == sorted(antrag.fahrten, key=lambda f: (f.datum, f.soll_ab))
-    assert len(antrag.verworfen) == 21 - 11
-    assert any("Kappung" in h for h in antrag.hinweise)
+    # 22 Faelle >= 60: 11 eingereicht, 10 Reserve, verworfen nur die zweite Hinfahrt am 1.8.; 19 min zaehlt nirgends
+    assert len(antrag.reserve) == 10
+    assert [(f.datum.day, f.verspaetung_min) for f in antrag.verworfen] == [(1, 70)]
+    assert all(f.verspaetung_min >= 60 for f in antrag.fahrten + antrag.reserve)
 
 
 def test_optimierer_unter_bagatellgrenze():
@@ -80,13 +84,33 @@ def test_sammelregel_gewinnt_bei_vielen_kurzen_verspaetungen():
     assert any("Sammelregel" in h for h in antrag.hinweise)
 
 
-def test_sammelregel_stoppt_an_der_kappung():
+def test_sammelregel_stoppt_an_der_kappung_und_verteilt():
     fahrten = [_fahrt(t, "hin", 45) for t in range(1, 29)]       # 28 x 45 min = 1260 min
     antrag = optimiere(*_rahmen(), fahrten)
     assert antrag.rechenweg == "sammeln" and antrag.betrag_eur == 15.75
     assert sum(f.verspaetung_min for f in antrag.fahrten) >= 11 * 60
     assert len(antrag.fahrten) == 15                             # 15 x 45 = 675 >= 660
-    assert len(antrag.verworfen) == 13
+    assert len(antrag.reserve) == 10 and len(antrag.verworfen) == 3
+    # Verteilung: Anfang und Ende des Monats sind dabei, keine langen Luecken
+    tage = [f.datum.day for f in antrag.fahrten]
+    assert tage[0] <= 2 and tage[-1] >= 27
+    assert max(b - a for a, b in zip(tage, tage[1:])) <= 3
+
+
+def test_plausibilitaet_rueckfahrt_nach_hinfahrt_und_gleiche_strecke():
+    hin = _fahrt(5, "hin", 90)                                   # A -> B, an 08:15 + 90 = 09:45
+    zu_frueh = Fahrt(date(2026, 8, 5), "rueck", "RE 2", "B", "A", datetime(2026, 8, 5, 9, 0),
+                     datetime(2026, 8, 5, 9, 45), ist_an=datetime(2026, 8, 5, 11, 0))
+    passend = Fahrt(date(2026, 8, 5), "rueck", "RE 3", "B", "A", datetime(2026, 8, 5, 17, 0),
+                    datetime(2026, 8, 5, 17, 45), ist_an=datetime(2026, 8, 5, 18, 50))
+    andere_strecke = Fahrt(date(2026, 8, 5), "rueck", "RE 4", "C", "A", datetime(2026, 8, 5, 18, 0),
+                           datetime(2026, 8, 5, 18, 45), ist_an=datetime(2026, 8, 5, 20, 0))
+    assert vertraeglich(passend, [hin]) and not vertraeglich(zu_frueh, [hin]) and not vertraeglich(andere_strecke, [hin])
+    assert not vertraeglich(_fahrt(5, "hin", 70), [hin])
+    antrag = optimiere(*_rahmen(), [hin, zu_frueh, passend, andere_strecke])
+    gewaehlt = antrag.fahrten + antrag.reserve
+    assert len(gewaehlt) == 2 and {f.zug for f in gewaehlt} == {"RE 1", "RE 3"}
+    assert len(antrag.verworfen) == 2
 
 
 def test_ausfall_ohne_ersatz_gilt_als_60_min():

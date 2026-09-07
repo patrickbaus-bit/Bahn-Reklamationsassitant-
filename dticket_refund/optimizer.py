@@ -1,51 +1,93 @@
-"""Waehlt aus den gefundenen Verspaetungen die Menge und den Rechenweg, die den hoechsten
-Erstattungsbetrag ergeben.
+"""Waehlt aus den gefundenen Verspaetungen die Fahrten und den Rechenweg, die den
+hoechsten Erstattungsbetrag ergeben - und zwar so, dass die Auswahl plausibel ist.
 
-Pro Tag, Strecke und Richtung zaehlt nur eine Fahrt (der Pendler sitzt nur in einem Zug); von
-mehreren Zuegen im Zeitfenster wird der mit der laengsten Verspaetung angenommen - der
-Nutzer streicht anschliessend, was er nicht gefahren ist.
+Plausibilitaet (ein Pendler sitzt nur in einem Zug):
+* pro Tag hoechstens eine Hinfahrt und eine Rueckfahrt,
+* die Rueckfahrt faehrt erst ab, nachdem die Hinfahrt tatsaechlich angekommen ist,
+  und gehoert zur selben Strecke (zurueck von dort, wo man hingefahren ist).
+
+Verteilung: statt stur die laengsten Verspaetungen zu nehmen, werden die Fahrten so
+gewaehlt, dass zwischen den Fahrtagen moeglichst viele Tage liegen (Farthest-Point-
+Greedy). Gewaehlt wird nur so viel, wie fuer die Kappung noetig ist; dazu kommen
+RESERVE weitere Fahrten als Ersatz, falls der Nutzer welche streicht. Alles andere
+wird verworfen und muss nicht eingereicht werden.
 
 Rechenwege (siehe rules.py): "einzelfall" (1,50 EUR je Fall ab 60 min) und "sammeln"
-(alle Faelle ab 20 min addiert, 1,50 EUR je volle 60 min). Die Sammelregel liefert nie
-weniger Einheiten als die Einzelfallregel, da jeder 60-Minuten-Fall mindestens eine volle
-Stunde beitraegt; bei Gleichstand wird der einfachere Einzelfall-Weg genommen.
+(alle Faelle ab 20 min addiert, 1,50 EUR je volle 60 min).
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from .models import Antrag, Fahrt, Pendelstrecke, Person, Ticket
 from .rules import REGELN, Regelwerk, ticketpreis
+
+RESERVE = 10
 
 
 def _eur(x: float) -> str:
     return f"{x:.2f} EUR".replace(".", ",")
 
 
-def _eine_pro_tag_und_richtung(fahrten: list[Fahrt]) -> list[Fahrt]:
-    beste: dict[tuple, Fahrt] = {}
-    for f in fahrten:
-        key = (f.datum, f.richtung, f.start, f.ziel)
-        if key not in beste or f.verspaetung_min > beste[key].verspaetung_min:
-            beste[key] = f
-    return list(beste.values())
+def _ankunft(f: Fahrt) -> datetime:
+    """Tatsaechliche Ankunft am Ziel (bei Ausfall: Ersatzankunft oder Soll + 60 min)."""
+    if f.ausgefallen:
+        return f.ersatz_an or f.soll_an + timedelta(minutes=60)
+    return f.ist_an or f.soll_an
 
 
-def _auswahl_einzelfall(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float) -> list[Fahrt]:
-    faelle = [f for f in kandidaten if f.verspaetung_min >= regeln.schwelle_einzelfall_min]
-    return faelle[:regeln.max_einheiten(preis)]
+def vertraeglich(f: Fahrt, gewaehlt: list[Fahrt]) -> bool:
+    """Passt ``f`` zu den bereits gewaehlten Fahrten desselben Tages?"""
+    for g in gewaehlt:
+        if g.datum != f.datum:
+            continue
+        if g.richtung == f.richtung:
+            return False                      # zwei Hin- oder zwei Rueckfahrten am selben Tag
+        hin, rueck = (g, f) if g.richtung == "hin" else (f, g)
+        if not (rueck.start == hin.ziel and rueck.ziel == hin.start):
+            return False                      # andere Strecke zurueck als hin
+        if rueck.soll_ab < _ankunft(hin):
+            return False                      # Rueckzug faehrt ab, bevor man angekommen ist
+    return True
 
 
-def _auswahl_sammeln(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float) -> list[Fahrt]:
-    """Laengste Verspaetungen zuerst, bis die Kappung erreicht ist."""
-    ziel_minuten = regeln.max_einheiten(preis) * 60
-    gewaehlt, summe = [], 0
-    for f in kandidaten:
-        if f.verspaetung_min < regeln.schwelle_sammeln_min:
-            break
-        if summe >= ziel_minuten:
-            break
-        gewaehlt.append(f)
-        summe += f.verspaetung_min
-    return gewaehlt
+def _abstand(f: Fahrt, gewaehlt: list[Fahrt]) -> int:
+    """Kleinster Abstand in Tagen zu einem bereits gewaehlten Fahrtag (gross, wenn keiner)."""
+    tage = {g.datum for g in gewaehlt}
+    if not tage:
+        return 10_000
+    return min(abs((f.datum - t).days) for t in tage)
+
+
+def _greedy(kandidaten: list[Fahrt], gewaehlt: list[Fahrt], fertig, maximal: int) -> list[Fahrt]:
+    """Nimmt Fahrten auf, bis ``fertig(gewaehlt)`` gilt oder ``maximal`` neue erreicht sind.
+
+    Bevorzugt den Kandidaten mit dem groessten Tagesabstand zur bisherigen Auswahl,
+    bei Gleichstand den mit der laengsten Verspaetung. Unvertraegliche fallen weg.
+    """
+    offen = [f for f in kandidaten if f not in gewaehlt]
+    neu: list[Fahrt] = []
+    while offen and len(neu) < maximal and not fertig(gewaehlt):
+        offen.sort(key=lambda f: (-_abstand(f, gewaehlt), -f.verspaetung_min, f.datum, f.soll_ab))
+        f = offen.pop(0)
+        if vertraeglich(f, gewaehlt):
+            gewaehlt.append(f)
+            neu.append(f)
+    return neu
+
+
+def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg: str
+             ) -> tuple[list[Fahrt], list[Fahrt], int]:
+    """(eingereicht, reserve, einheiten) fuer einen Rechenweg."""
+    schwelle = regeln.schwelle_einzelfall_min if rechenweg == "einzelfall" else regeln.schwelle_sammeln_min
+    zaehle = regeln.einheiten_einzelfall if rechenweg == "einzelfall" else regeln.einheiten_sammeln
+    passende = [f for f in kandidaten if f.verspaetung_min >= schwelle]
+    ziel = regeln.max_einheiten(preis)
+    gewaehlt: list[Fahrt] = []
+    _greedy(passende, gewaehlt, lambda g: zaehle([f.verspaetung_min for f in g]) >= ziel, len(passende))
+    eingereicht = list(gewaehlt)
+    reserve = _greedy(passende, gewaehlt, lambda g: False, RESERVE)
+    return eingereicht, reserve, zaehle([f.verspaetung_min for f in eingereicht])
 
 
 def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pendelstrecke],
@@ -54,43 +96,38 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
     if isinstance(strecken, Pendelstrecke):
         strecken = [strecken]
     preis = preis_eur if preis_eur is not None else ticketpreis(ticket.monat)
-    kandidaten = [f for f in _eine_pro_tag_und_richtung(fahrten)
-                  if f.verspaetung_min >= regeln.schwelle_sammeln_min]
-    kandidaten.sort(key=lambda f: (-f.verspaetung_min, f.datum, f.richtung))
+    kandidaten = [f for f in fahrten if f.verspaetung_min >= regeln.schwelle_sammeln_min]
 
-    varianten = {
-        "einzelfall": _auswahl_einzelfall(kandidaten, regeln, preis),
-        "sammeln": _auswahl_sammeln(kandidaten, regeln, preis),
-    }
-    einheiten = {
-        "einzelfall": regeln.einheiten_einzelfall([f.verspaetung_min for f in varianten["einzelfall"]]),
-        "sammeln": regeln.einheiten_sammeln([f.verspaetung_min for f in varianten["sammeln"]]),
-    }
-    betraege = {k: regeln.betrag(n, preis) for k, n in einheiten.items()}
+    varianten = {w: _auswahl(kandidaten, regeln, preis, w) for w in ("einzelfall", "sammeln")}
+    betraege = {w: regeln.betrag(v[2], preis) for w, v in varianten.items()}
     # Bei Gleichstand gewinnt der Einzelfall-Weg (uebliches Verfahren, weniger Fahrten noetig).
     rechenweg = "einzelfall" if betraege["einzelfall"] >= betraege["sammeln"] else "sammeln"
-    gewaehlt = sorted(varianten[rechenweg], key=lambda f: (f.datum, f.soll_ab))
-    gewaehlt_ids = {id(f) for f in gewaehlt}
-    rest = sorted((f for f in kandidaten if id(f) not in gewaehlt_ids), key=lambda f: (f.datum, f.soll_ab))
+    eingereicht, reserve, einheiten = varianten[rechenweg]
+    nach_zeit = lambda f: (f.datum, f.soll_ab)
+    eingereicht.sort(key=nach_zeit)
+    reserve.sort(key=nach_zeit)
+    benutzt = {id(f) for f in eingereicht + reserve}
+    rest = sorted((f for f in kandidaten if id(f) not in benutzt), key=nach_zeit)
     betrag = betraege[rechenweg]
 
     hinweise: list[str] = []
     if not kandidaten:
-        hinweise.append("Keine Verspätung ab 20 Minuten auf dieser Strecke gefunden.")
+        hinweise.append("Keine Verspätung ab 20 Minuten auf den Strecken gefunden.")
     elif betrag == 0.0:
         hinweise.append(
-            f"Der Anspruch ({einheiten[rechenweg]} x {_eur(regeln.pauschale_eur)}) liegt nicht über der "
+            f"Der Anspruch ({einheiten} x {_eur(regeln.pauschale_eur)}) liegt nicht über der "
             f"Bagatellgrenze von {_eur(regeln.bagatellgrenze_eur)} - es wird nichts ausgezahlt. "
             f"Ab {regeln.min_einheiten()} Einheiten im Monat lohnt sich der Antrag.")
     if rechenweg == "sammeln" and betraege["sammeln"] > betraege["einzelfall"]:
         hinweise.append(
-            f"Sammelregel (Teil C Nr. 8.1 Deutschlandtarif) gewählt: alle Verspätungen ab 20 Minuten "
-            f"addiert ergeben {sum(f.verspaetung_min for f in gewaehlt)} Minuten = {einheiten['sammeln']} volle "
+            f"Sammelregel (Teil C Nr. 8.1 Deutschlandtarif) gewählt: die eingereichten Verspätungen ab 20 Minuten "
+            f"ergeben zusammen {sum(f.verspaetung_min for f in eingereicht)} Minuten = {einheiten} volle "
             f"Stunden. Die Einzelfallregel (nur Fälle ab 60 min) hätte {_eur(betraege['einzelfall'])} ergeben.")
-    if rest and betrag >= regeln.kappung_eur(preis):
+    if reserve or rest:
         hinweise.append(
-            f"{len(rest)} weitere Verspätung(en) bringen kein zusätzliches Geld, weil die Kappung von "
-            f"{_eur(regeln.kappung_eur(preis))} (25 % von {_eur(preis)}) erreicht ist.")
-    return Antrag(person=person, ticket=ticket, strecken=strecken, fahrten=gewaehlt, verworfen=rest,
-                  betrag_eur=betrag, ticketpreis_eur=preis, rechenweg=rechenweg,
-                  einheiten=einheiten[rechenweg], hinweise=hinweise)
+            f"{len(eingereicht)} Fahrten reichen für den Betrag; sie sind möglichst weit über den Monat verteilt. "
+            f"{len(reserve)} Fahrten stehen als Reserve bereit, falls Sie eingereichte Fahrten streichen"
+            + (f"; {len(rest)} weitere wurden verworfen." if rest else "."))
+    return Antrag(person=person, ticket=ticket, strecken=strecken, fahrten=eingereicht, reserve=reserve,
+                  verworfen=rest, betrag_eur=betrag, ticketpreis_eur=preis, rechenweg=rechenweg,
+                  einheiten=einheiten, hinweise=hinweise)

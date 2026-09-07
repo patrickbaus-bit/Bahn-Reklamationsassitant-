@@ -132,7 +132,8 @@ class Antrag:
     ticket: Ticket
     strecken: list[Pendelstrecke]
     fahrten: list[Fahrt] = field(default_factory=list)      # die eingereichten
-    verworfen: list[Fahrt] = field(default_factory=list)    # >= 60 min, aber ueber der Kappung
+    reserve: list[Fahrt] = field(default_factory=list)      # Ersatz, falls der Nutzer welche streicht
+    verworfen: list[Fahrt] = field(default_factory=list)    # nicht benoetigt
     betrag_eur: float = 0.0
     ticketpreis_eur: float = 0.0
     rechenweg: str = "einzelfall"     # "einzelfall" (ab 60 min je Fall) oder "sammeln" (ab 20 min addiert)
