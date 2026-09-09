@@ -48,6 +48,23 @@ def ergaenze_ersatzankunft(fahrten: list[Fahrt]) -> None:
                     break
 
 
+def luecken_im_fenster(luecken: list[datetime], strecken: list[Pendelstrecke], ticket: Ticket) -> list[str]:
+    """Meldungen fuer Pendelfenster, in die eine Archivluecke faellt (dort koennen Zuege fehlen)."""
+    meldungen = []
+    for strecke in strecken:
+        for tag in strecke.fahrtage(ticket.erster_tag, ticket.letzter_tag):
+            richtungen = ("hin",) if strecke.nur_hin else ("hin", "rueck")
+            for richtung in richtungen:
+                uhrzeit = strecke.hin_ab if richtung == "hin" else strecke.rueck_ab
+                von, bis = _fenster(tag, uhrzeit, strecke.toleranz)
+                treffer = [h for h in luecken if h < bis and h + timedelta(hours=1) > von]
+                if treffer:
+                    stunden = ", ".join(f"{h:%H}–{h + timedelta(hours=1):%H} Uhr" for h in treffer)
+                    meldungen.append(f"{tag:%d.%m.%Y} {'Hin' if richtung == 'hin' else 'Rück'} "
+                                     f"({strecke.label}): Archivlücke {stunden}, Züge können fehlen")
+    return meldungen
+
+
 async def suche_verspaetungen(provider: DelayProvider, ticket: Ticket,
                               strecken: Pendelstrecke | list[Pendelstrecke],
                               fortschritt: Optional[Fortschritt] = None,

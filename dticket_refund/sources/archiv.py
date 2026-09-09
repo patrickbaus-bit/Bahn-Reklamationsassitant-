@@ -18,7 +18,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -149,6 +149,31 @@ class ArchivQuelle:
                 ausgefallen=bool(ab_ausfall or an_ausfall), quelle="Archiv"))
         return fahrten
 
+    def _stunden_ohne_daten(self, pfad: Path) -> list[datetime]:
+        import duckdb
+        rows = duckdb.connect().execute(
+            "SELECT min(time), max(time), list(DISTINCT date_trunc('hour', time)) FROM read_parquet(?)",
+            [str(pfad)]).fetchone()
+        von, bis, vorhanden = rows
+        if von is None:
+            return []
+        vorhanden = {h for h in vorhanden}
+        h = von.replace(minute=0, second=0, microsecond=0)
+        fehlend = []
+        while h <= bis:
+            if h not in vorhanden:
+                fehlend.append(h)
+            h += timedelta(hours=1)
+        return fehlend
+
+    async def luecken(self, monat: date) -> list[datetime]:
+        """Stunden des Monats, fuer die das Archiv gar keine Halte enthaelt (Poll-Luecken)."""
+        key = ("luecken", monat)
+        if key not in self._monat_cache:
+            pfad = await self.lade_monat(monat)
+            self._monat_cache[key] = await asyncio.to_thread(self._stunden_ohne_daten, pfad)
+        return self._monat_cache[key]
+
     async def fahrten(self, start: Station, ziel: Station, tag: date, richtung: str) -> list[Fahrt]:
         monat = tag.replace(day=1)
         pfad = await self.lade_monat(monat)
@@ -228,4 +253,4 @@ def _norm(s: str) -> str:
 
 def _letzter_monat() -> date:
     heute = date.today().replace(day=1)
-    return (heute.replace(day=1) - __import__("datetime").timedelta(days=1)).replace(day=1)
+    return (heute - timedelta(days=1)).replace(day=1)

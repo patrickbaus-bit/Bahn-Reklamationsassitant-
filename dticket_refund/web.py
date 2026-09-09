@@ -21,7 +21,7 @@ from .models import Antrag, Fahrt, Pendelstrecke, Person, Station, Ticket
 from .optimizer import optimiere
 from .pdfgen import erzeuge_pdf
 from .rules import REGELN, ticketpreis
-from .search import suche_verspaetungen
+from .search import luecken_im_fenster, suche_verspaetungen
 from .sources import standard_provider, standard_stationen
 
 log = logging.getLogger(__name__)
@@ -60,6 +60,7 @@ class Job:
     pdf: Optional[bytes] = None
     abgewaehlt: set[int] = field(default_factory=set)   # Indizes in ``alle``, vom Nutzer abgehakt (nicht gefahren)
     erzwungen: set[int] = field(default_factory=set)    # vom Nutzer angehakt
+    luecken: list[str] = field(default_factory=list)    # Pendelfenster mit Archivluecke
     auffuellen: bool = True                             # automatisch bis zur Kappung ergaenzen
 
 
@@ -170,7 +171,13 @@ async def _laufe(job: Job):
     def fortschritt(n, gesamt, _):
         job.erledigt, job.gesamt = n, gesamt
     try:
-        job.alle, job.fehler = await suche_verspaetungen(standard_provider(), job.ticket, job.strecken, fortschritt)
+        provider = standard_provider()
+        job.alle, job.fehler = await suche_verspaetungen(provider, job.ticket, job.strecken, fortschritt)
+        if hasattr(provider, "luecken"):
+            try:
+                job.luecken = luecken_im_fenster(await provider.luecken(job.ticket.monat), job.strecken, job.ticket)
+            except Exception as e:
+                log.warning("Lueckenpruefung fehlgeschlagen: %s", e)
         _berechne(job)
         job.status = "fertig"
     except Exception as e:

@@ -13,11 +13,13 @@
   </div>
   {% for h in antrag.hinweise %}<div class="hinweis">{{ h }}</div>{% endfor %}
   {% if job.fehler and job.status != 'fehler' %}<div class="hinweis">{{ job.fehler|length }} Tages-Abfragen lieferten Fehler (Datenquelle nicht erreichbar) – diese Tage fehlen ggf.</div>{% endif %}
+  {% if job.luecken %}<div class="hinweis"><b>Datenlücken im Archiv:</b> In {{ job.luecken|length }} Pendelfenster(n) fehlen dem Archiv ganze Stunden. Verspätungen an diesen Tagen werden nicht gefunden, und Ausfälle dort können fälschlich als „ohne Folgezug“ erscheinen.
+    <details><summary class="klein">Betroffene Fenster anzeigen</summary><ul class="klein" style="margin:6px 0">{% for l in job.luecken %}<li>{{ l }}</li>{% endfor %}</ul></details></div>{% endif %}
 </div>
 
 <div class="karte">
   <h2>Gefundene Verspätungen ({{ kandidaten|length }})</h2>
-  <p class="klein">Alle Fahrten ab 20 Minuten Verspätung im Zeitfenster. <b>Haken = wird eingereicht.</b> Die Vorauswahl ist automatisch: pro Tag höchstens eine Hin- und eine Rückfahrt (Rückfahrt erst nach Ankunft, gleiche Strecke), möglichst weit über den Monat verteilt, nur so viele wie für den Betrag nötig. Haken entfernen bei Fahrten, die Sie nicht gefahren sind; Haken setzen, um eine Fahrt zusätzlich einzureichen. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. „Ist an –“ bedeutet Zugausfall ohne erkennbaren Folgezug; dafür werden pauschal 60 Minuten angesetzt.</p>
+  <p class="klein">Alle Fahrten ab 20 Minuten Verspätung im Zeitfenster. <b>Haken = wird eingereicht.</b> Die Vorauswahl ist automatisch: pro Tag höchstens eine Hin- und eine Rückfahrt (Rückfahrt erst nach Ankunft, gleiche Strecke), möglichst weit über den Monat verteilt, nur so viele wie für den Betrag nötig. Haken entfernen bei Fahrten, die Sie nicht gefahren sind; Haken setzen, um eine Fahrt zusätzlich einzureichen. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. „Ist an –“ bedeutet Zugausfall ohne erkennbaren Folgezug; dafür werden pauschal 60 Minuten angesetzt. ⚠ markiert Fälle, die die DB anders bewerten könnte (Grenzfall knapp über 20 bzw. 60 Minuten, pauschal angesetzter Ausfall).</p>
   <form method="post" action="/ergebnis/{{ job_id }}/abwaehlen">
   <table>
     <tr><th title="Haken = einreichen">einreichen</th><th>Datum</th><th>Richtung</th><th>Zug</th><th>Von → Nach</th><th>Soll ab</th><th>Soll an</th><th>Ist an</th><th>Verspätung</th><th>Status</th></tr>
@@ -30,8 +32,9 @@
       <td>{{ f.start }} → {{ f.ziel }}</td>
       <td>{{ f.soll_ab|dt('%H:%M') }}</td><td>{{ f.soll_an|dt('%H:%M') }}</td>
       <td>{% if f.ausgefallen %}{{ (f.ersatz_an|dt('%H:%M')) if f.ersatz_an else '–' }}{% else %}{{ f.ist_an|dt('%H:%M') }}{% endif %}</td>
-      <td><b>{{ f.verspaetung_min }} min</b></td>
-      <td>{% if f.ausgefallen %}Ausfall{% if not f.ersatz_an %} (kein Folgezug){% endif %}{% if i in gewaehlt %} · {% endif %}{% endif %}{% if i in gewaehlt %}<b>eingereicht</b>{% endif %}</td>
+      <td><b>{{ f.verspaetung_min }} min</b>{% if f.risiko %} <span title="{{ f.risiko }}" style="color:var(--gelb);cursor:help">⚠</span>{% endif %}</td>
+      <td>{% if f.ausgefallen %}Ausfall{% if not f.ersatz_an %} (kein Folgezug){% endif %}{% if i in gewaehlt %} · {% endif %}{% endif %}{% if i in gewaehlt %}<b>eingereicht</b>{% endif %}
+          {% if f.risiko %}<div class="klein" style="color:#8a6d00">{{ f.risiko }}</div>{% endif %}</td>
     </tr>
     {% else %}<tr><td colspan="10">Keine Verspätung ab 20 Minuten im Zeitfenster gefunden.</td></tr>{% endfor %}
   </table>

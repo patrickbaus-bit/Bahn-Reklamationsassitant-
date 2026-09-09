@@ -124,6 +124,23 @@ class Fahrt:
         """Sammelregel: ab 20 Minuten zaehlen die Minuten mit."""
         return self.verspaetung_min >= 20
 
+    @property
+    def risiko(self) -> str:
+        """Warum die DB diesen Fall anders bewerten koennte (leer = robust).
+
+        Das Archiv speichert mitunter die letzte Prognose statt der endgueltigen Ist-Zeit;
+        Faelle knapp ueber einer Schwelle koennen daher kippen. Ausfaelle ohne erkennbaren
+        Folgezug werden pauschal mit 60 Minuten angesetzt - das ist eine Annahme.
+        """
+        if self.ausgefallen and self.ersatz_an is None:
+            return "Ausfall ohne Folgezug im Archiv, pauschal 60 min angesetzt"
+        v = self.verspaetung_min
+        if 60 <= v <= 64:
+            return "Grenzfall: knapp über 60 min"
+        if 20 <= v <= 22:
+            return "Grenzfall: knapp über 20 min"
+        return ""
+
 
 @dataclass
 class Antrag:

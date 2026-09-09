@@ -83,3 +83,10 @@ async def test_stationsliste_fasst_gleichnamige_zusammen(archiv):
     assert [(s.id, s.name) for s in treffer] == [("8000001,8098001", "A Hbf")]
     assert archiv.stationen_datei().exists()
     assert (await st.suche("hbf"))[0].name in ("A Hbf", "B Hbf")
+
+
+async def test_luecken_erkennung(archiv):
+    luecken = await archiv.luecken(date(2026, 8, 1))
+    # Testdaten haben Halte am 3.8. (06:xx-08:xx) und 4.8. 07:xx -> dazwischen fehlen Stunden
+    assert luecken and all(l.minute == 0 for l in luecken)
+    assert datetime(2026, 8, 3, 12, 0) in luecken and datetime(2026, 8, 3, 7, 0) not in luecken

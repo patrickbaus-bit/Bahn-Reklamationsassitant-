@@ -63,15 +63,16 @@ def _abstand(f: Fahrt, gewaehlt: list[Fahrt]) -> int:
 def _greedy(kandidaten: list[Fahrt], gewaehlt: list[Fahrt], fertig, maximal: int) -> list[Fahrt]:
     """Nimmt Fahrten auf, bis ``fertig(gewaehlt)`` gilt oder ``maximal`` neue erreicht sind.
 
-    Bevorzugt Faelle ab 60 Minuten (eine Einheit je Fahrt) vor kurzen, darunter den
-    Kandidaten mit dem groessten Tagesabstand zur bisherigen Auswahl, bei Gleichstand
-    den mit der laengsten Verspaetung. Unvertraegliche fallen weg.
+    Bevorzugt Faelle ab 60 Minuten (eine Einheit je Fahrt) vor kurzen, robuste vor
+    riskanten (Grenzfaelle, pauschale Ausfaelle), darunter den Kandidaten mit dem
+    groessten Tagesabstand zur bisherigen Auswahl, bei Gleichstand den mit der laengsten
+    Verspaetung. Unvertraegliche fallen weg.
     """
     offen = [f for f in kandidaten if f not in gewaehlt]
     neu: list[Fahrt] = []
     while offen and len(neu) < maximal and not fertig(gewaehlt):
-        offen.sort(key=lambda f: (f.verspaetung_min < 60, -_abstand(f, gewaehlt), -f.verspaetung_min,
-                                  f.datum, f.soll_ab))
+        offen.sort(key=lambda f: (f.verspaetung_min < 60, bool(f.risiko), -_abstand(f, gewaehlt),
+                                  -f.verspaetung_min, f.datum, f.soll_ab))
         f = offen.pop(0)
         if vertraeglich(f, gewaehlt):
             gewaehlt.append(f)
@@ -159,6 +160,12 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
             f"{len(unplausibel)} angehakte Fahrt(en) wurden nicht übernommen, weil sie nicht zu anderen Fahrten "
             f"desselben Tages passen (zweite Fahrt gleicher Richtung, Rückfahrt vor Ankunft oder andere Strecke): "
             + ", ".join(f"{f.datum:%d.%m.} {f.zug}" for f in unplausibel[:6]) + ("…" if len(unplausibel) > 6 else "."))
+    riskant = [f for f in eingereicht if f.risiko]
+    if riskant:
+        hinweise.append(
+            f"{len(riskant)} eingereichte Fahrt(en) sind mit ⚠ markiert (Grenzfall oder pauschal angesetzter "
+            f"Ausfall) - die DB kann diese anders bewerten. Robustere Fälle wurden bevorzugt; wenn möglich, "
+            f"stattdessen eine andere Fahrt anhaken.")
     if auffuellen and (reserve or rest):
         hinweise.append(
             f"{len(eingereicht)} Fahrten reichen für den Betrag; sie sind möglichst weit über den Monat verteilt. "

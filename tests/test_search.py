@@ -64,3 +64,21 @@ async def test_suche_ueber_den_monat(monkeypatch):
     assert ("2", "1", date(2026, 8, 3), "rueck") in p.aufrufe          # Rueckweg vertauscht
     assert len(fahrten) == 2 * len(montage) and fehler == []
     assert sum(f.erstattungsfaehig for f in fahrten) == len(montage)
+
+
+def test_luecken_im_fenster():
+    from dticket_refund.search import luecken_im_fenster
+    strecke = Pendelstrecke(Station("1", "A"), Station("2", "B"), hin_ab="07:30", rueck_ab="17:00",
+                            toleranz=timedelta(minutes=60), wochentage=(1, 2, 3, 4, 5))
+    luecken = [datetime(2026, 8, 27, 6, 0), datetime(2026, 8, 28, 12, 0), datetime(2026, 8, 29, 7, 0)]  # 29.8. = Samstag
+    meldungen = luecken_im_fenster(luecken, [strecke], Ticket(monat=date(2026, 8, 1)))
+    assert len(meldungen) == 1 and meldungen[0].startswith("27.08.2026 Hin") and "06–07 Uhr" in meldungen[0]
+
+
+def test_risiko_kennzeichnung():
+    assert _f(7, 30, versp=61).risiko.startswith("Grenzfall")
+    assert _f(7, 30, versp=21).risiko.startswith("Grenzfall")
+    assert _f(7, 30, versp=75).risiko == "" and _f(7, 30, versp=45).risiko == ""
+    assert "pauschal" in _f(7, 30, ausgefallen=True).risiko
+    mit_ersatz = _f(7, 30, ausgefallen=True); mit_ersatz.ersatz_an = datetime(2026, 8, 3, 9, 30)
+    assert mit_ersatz.risiko == ""
