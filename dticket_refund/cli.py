@@ -14,6 +14,8 @@ from .sources import standard_provider, standard_stationen
 
 async def _suche(args):
     stationen = standard_stationen()
+    # Bahnhofsliste aus dem gewuenschten Monat bauen, damit nicht zusaetzlich der letzte Monat geladen wird
+    await stationen.vorbereiten(date.fromisoformat(args.monat + "-01"))
     start = (await stationen.suche(args.von))[0]
     ziel = (await stationen.suche(args.nach))[0]
     print(f"{start.name} ({start.id}) -> {ziel.name} ({ziel.id})", file=sys.stderr)
