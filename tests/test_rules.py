@@ -25,7 +25,10 @@ def test_kappung_und_bagatellgrenze():
 
 def test_zwei_rechenwege():
     assert REGELN.einheiten_einzelfall([65, 95, 30, 19]) == 2
-    assert REGELN.einheiten_sammeln([65, 95, 30, 19]) == 3        # 190 min -> 3 volle Stunden
+    assert REGELN.einheiten_sammeln([65, 95, 30, 19]) == 2        # 30 min reichen nicht fuer eine Stunde
+    assert REGELN.einheiten_sammeln([65, 95, 30, 35, 19]) == 3    # 65 min kurze -> 1 weitere Einheit
+    assert REGELN.einheiten_sammeln([440]) == 1                   # ein Fall ist ein Fall
+    assert REGELN.einheiten_sammeln([440, 59, 59]) == 2
 
 
 def _fahrt(tag, richtung, minuten, ausgefallen=False):
@@ -74,12 +77,12 @@ def test_optimierer_unter_bagatellgrenze():
 
 
 def test_sammelregel_gewinnt_bei_vielen_kurzen_verspaetungen():
-    # 2 Faelle >= 60 (65+95) = 3,00 EUR einzeln; gesammelt mit 4 x 30 min: 280 min -> 4 Std = 6,00 EUR
-    fahrten = [_fahrt(1, "hin", 65), _fahrt(2, "hin", 95)] + [_fahrt(t, "hin", 30) for t in (3, 4, 5, 6)]
+    # 2 Faelle >= 60 = 2 Einheiten; dazu 4 x 30 min = 120 min = 2 weitere Einheiten -> 6,00 EUR
+    fahrten = [_fahrt(1, "hin", 65), _fahrt(2, "hin", 440)] + [_fahrt(t, "hin", 30) for t in (3, 4, 5, 6)]
     fahrten.append(_fahrt(7, "hin", 15))   # zaehlt nirgends
     antrag = optimiere(*_rahmen(), fahrten)
     assert antrag.rechenweg == "sammeln"
-    assert antrag.einheiten == 4 and antrag.betrag_eur == 6.0
+    assert antrag.einheiten == 4 and antrag.betrag_eur == 6.0    # 440 min zaehlen nur einmal
     assert len(antrag.fahrten) == 6 and all(f.verspaetung_min >= 20 for f in antrag.fahrten)
     assert any("Sammelregel" in h for h in antrag.hinweise)
 

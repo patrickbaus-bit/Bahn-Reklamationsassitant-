@@ -33,13 +33,16 @@ Terminal-Variante zum Testen der Datenquelle:
 | Regel | Wert |
 |---|---|
 | Einzelfall ab 60 min Verspätung am Ziel (auch Ausfall, Anschlussverlust) | 1,50 EUR je Fall |
-| Sammelregel: Verspätungen ab 20 min im Monat addiert | 1,50 EUR je volle 60 min |
+| Sammelregel: Fälle von 20–59 min im Monat addiert | 1,50 EUR je volle 60 min dieser Summe, zusätzlich zu den Einzelfällen |
 | Kappung | 25 % des Ticketpreises (63 EUR → 15,75 EUR) |
 | Bagatellgrenze | Auszahlung nur, wenn Anspruch > 4,00 EUR (ab 3 Einheiten) |
 | Ticketpreis | 49 EUR (05/2023–12/2024), 58 EUR (2025), 63 EUR (2026) |
 | Frist | Beschwerde binnen 3 Monaten (Art. 28 VO 2021/782); DB akzeptiert 12 Monate; Verjährung 1 Jahr |
 
-Die App berechnet beide Rechenwege und nimmt den mit dem höheren Betrag. Bei Zugausfällen wird
+Die App berechnet beide Rechenwege und nimmt den mit dem höheren Betrag. Ein Fall ist dabei
+immer ein Fall: Eine Verspätung ab 60 Minuten bringt genau 1,50 EUR, egal wie lang sie war
+(ein Zug mit 440 Minuten wird nicht in sieben Stunden aufgeteilt). Zusammengerechnet werden nur
+die Fälle zwischen 20 und 59 Minuten. Bei Zugausfällen wird
 die Ankunft mit dem nächsten gefahrenen Zug angesetzt, ohne Folgezug pauschal 60 Minuten.
 
 Auswahl der Fahrten (`optimizer.py`):

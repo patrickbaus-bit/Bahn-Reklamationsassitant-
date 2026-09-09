@@ -13,7 +13,7 @@ RESERVE weitere Fahrten als Ersatz, falls der Nutzer welche streicht. Alles ande
 wird verworfen und muss nicht eingereicht werden.
 
 Rechenwege (siehe rules.py): "einzelfall" (1,50 EUR je Fall ab 60 min) und "sammeln"
-(alle Faelle ab 20 min addiert, 1,50 EUR je volle 60 min).
+(zusaetzlich die Faelle von 20 bis 59 min addiert, 1,50 EUR je volle 60 min davon).
 """
 from __future__ import annotations
 
@@ -119,10 +119,13 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
             f"Bagatellgrenze von {_eur(regeln.bagatellgrenze_eur)} - es wird nichts ausgezahlt. "
             f"Ab {regeln.min_einheiten()} Einheiten im Monat lohnt sich der Antrag.")
     if rechenweg == "sammeln" and betraege["sammeln"] > betraege["einzelfall"]:
+        minuten = [f.verspaetung_min for f in eingereicht]
+        lange = regeln.einheiten_einzelfall(minuten)
+        kurz = regeln.kurze_minuten(minuten)
         hinweise.append(
-            f"Sammelregel (Teil C Nr. 8.1 Deutschlandtarif) gewählt: die eingereichten Verspätungen ab 20 Minuten "
-            f"ergeben zusammen {sum(f.verspaetung_min for f in eingereicht)} Minuten = {einheiten} volle "
-            f"Stunden. Die Einzelfallregel (nur Fälle ab 60 min) hätte {_eur(betraege['einzelfall'])} ergeben.")
+            f"Sammelregel (Teil C Nr. 8.1 Deutschlandtarif) gewählt: {lange} Fälle ab 60 Minuten je eine Einheit, "
+            f"dazu {kurz} Minuten aus Verspätungen zwischen 20 und 59 Minuten = {kurz // 60} weitere Einheit(en). "
+            f"Nur die Einzelfallregel hätte {_eur(betraege['einzelfall'])} ergeben.")
     if reserve or rest:
         hinweise.append(
             f"{len(eingereicht)} Fahrten reichen für den Betrag; sie sind möglichst weit über den Monat verteilt. "

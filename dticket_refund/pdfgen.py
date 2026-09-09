@@ -74,9 +74,9 @@ def erzeuge_pdf(antrag: Antrag, heute: date | None = None) -> bytes:
     _abschnitt(pdf, f"Entschädigung für Verspätungen im Gültigkeitsmonat {t.monat_label}")
     betrag = f"{antrag.betrag_eur:.2f} EUR".replace(".", ",")
     if antrag.rechenweg == "sammeln":
-        regel = ("Ich rechne dabei gemäß Teil C Nr. 8.1 der Tarifbedingungen des Deutschlandtarifs die "
-                 "wiederholten Verspätungsfälle ab 20 Minuten innerhalb der Geltungsdauer zusammen "
-                 "(1,50 EUR je volle 60 Minuten).")
+        regel = ("Grundlage ist die pauschale Entschädigung von 1,50 EUR je Fall ab 60 Minuten Verspätung am "
+                 "Zielbahnhof; die Verspätungsfälle zwischen 20 und 59 Minuten rechne ich gemäß Teil C Nr. 8.1 "
+                 "der Tarifbedingungen des Deutschlandtarifs zusammen (1,50 EUR je volle 60 Minuten).")
     else:
         regel = ("Grundlage ist die pauschale Entschädigung von 1,50 EUR je Fall ab 60 Minuten Verspätung "
                  "am Zielbahnhof (Teil C Nr. 8.1 der Tarifbedingungen des Deutschlandtarifs).")

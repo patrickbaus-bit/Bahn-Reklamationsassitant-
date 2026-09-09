@@ -9,6 +9,13 @@ Fahrgast waehlen kann:
 * Sammelregel: wiederholte Verspaetungen ab 20 Minuten innerhalb des Gueltigkeitsmonats
   werden zusammengerechnet; je volle 60 Minuten 1,50 EUR.
 
+Die Sammelregel wird hier bewusst konservativ ausgelegt: Ein Fall ist ein Fall. Jede
+Verspaetung ab 60 Minuten bringt genau eine Einheit (1,50 EUR), unabhaengig von ihrer
+Dauer - ein einzelner Zug mit 440 Minuten Verspaetung wird nicht in sieben Stunden
+"aufgeteilt". Zusammengerechnet werden nur die Faelle zwischen 20 und 59 Minuten, die
+einzeln leer ausgingen; je volle 60 Minuten dieser Summe gibt es eine weitere Einheit.
+Das entspricht der bahn.de-FAQ ("1,50 Euro pro Fall") und vermeidet Kuerzungen.
+
 Beides ist gedeckelt auf 25 % des gezahlten Ticketpreises; ausgezahlt wird nur, wenn der
 Anspruch die Bagatellgrenze von 4 EUR ueberschreitet. Antraege werden gesammelt nach
 Ablauf des Monats gestellt (Teil C Nr. 8.2).
@@ -52,7 +59,14 @@ class Regelwerk:
         return sum(1 for v in verspaetungen_min if v >= self.schwelle_einzelfall_min)
 
     def einheiten_sammeln(self, verspaetungen_min: list[int]) -> int:
-        return sum(v for v in verspaetungen_min if v >= self.schwelle_sammeln_min) // 60
+        """Faelle ab 60 min je eine Einheit + volle Stunden aus den Faellen von 20 bis 59 min."""
+        kurze = sum(v for v in verspaetungen_min
+                    if self.schwelle_sammeln_min <= v < self.schwelle_einzelfall_min)
+        return self.einheiten_einzelfall(verspaetungen_min) + kurze // 60
+
+    def kurze_minuten(self, verspaetungen_min: list[int]) -> int:
+        return sum(v for v in verspaetungen_min
+                   if self.schwelle_sammeln_min <= v < self.schwelle_einzelfall_min)
 
 
 REGELN = Regelwerk()
