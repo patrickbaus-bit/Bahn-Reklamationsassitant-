@@ -1,100 +1,144 @@
 # Deutschlandticket-Refund
 
-Findet für eine Pendlerstrecke automatisch alle Verspätungen eines Gültigkeitsmonats und
-erzeugt den Fahrgastrechte-Antrag für das Deutschlandticket als PDF plus fertige E-Mail.
-Anders als bei [ronnyrefund.de](https://ronnyrefund.de/) muss man nicht jeden Tag einzeln
-anklicken: Strecke, Pendelzeiten und Wochentage eingeben, der Monat wird komplett durchsucht.
+Wer mit dem Deutschlandticket pendelt, hat bei Verspätungen Anspruch auf Entschädigung, muss
+dafür aber jede verspätete Fahrt selbst heraussuchen und beantragen. Dieses Programm macht das
+automatisch: Du gibst einmal deine Daten und deine Pendelstrecke ein, wählst den Monat, und die
+App sucht alle Verspätungen heraus, stellt den Antrag als PDF zusammen und öffnet eine fertige
+E-Mail an die Bahn. Du musst nur noch auf „Senden“ klicken.
 
-## Nutzung
+Das Programm läuft komplett auf deinem eigenen Rechner. Es gibt keinen Server im Internet, dem
+du deine Daten anvertraust.
 
-```sh
-sh bootstrap.sh          # legt .venv an und installiert die Abhängigkeiten
-.venv/bin/dticket-refund # öffnet http://127.0.0.1:8765/
-```
+## Schnellstart
 
-1. **Persönliche Daten** einmal eingeben (Name, Adresse, E-Mail, IBAN). Sie werden lokal in
-   `~/.config/dticket-refund/profil.json` gespeichert und beim nächsten Start vorbelegt.
-2. **Ticket**: Gültigkeitsmonat (nur abgeschlossene Monate der letzten 12 Monate) und Ticket-/Abonummer.
-3. **Pendlerstrecke**: Start, Ziel, ungefähre Abfahrtszeiten hin und zurück, Zeitfenster,
-   Pendeltage und Ausnahmetage (Urlaub, Homeoffice).
-4. Die App fragt für jeden Pendeltag beide Richtungen ab und listet alle Verspätungen ab 20 Minuten.
-   Fahrten, die man nicht gefahren ist, werden per Haken gestrichen. **Es darf nur eingereicht werden, was tatsächlich gefahren wurde.**
-5. **Versenden**: „In Apple Mail öffnen“ erzeugt einen Entwurf mit Empfänger, Betreff, Text und PDF-Anhang.
-   Nur noch auf Senden klicken. Alternativ .eml-Datei (Outlook/Thunderbird), PDF-Download oder mailto-Link.
-
-Terminal-Variante zum Testen der Datenquelle:
+Einmalig einrichten (installiert alles Nötige in einen Unterordner `.venv`):
 
 ```sh
-.venv/bin/dticket-refund suche "Frankfurt Hbf" "Darmstadt Hbf" 2026-08 --hin 07:30 --rueck 17:00
+sh bootstrap.sh
 ```
 
-## Rechenregeln (Tarifbedingungen Deutschlandtarif Teil C Nr. 8.1, Stand 12/2025)
+Danach jedes Mal starten mit:
 
-| Regel | Wert |
+```sh
+.venv/bin/dticket-refund
+```
+
+Dann im Browser `http://127.0.0.1:8765/` öffnen. Voraussetzung ist Python 3.10 oder neuer,
+auf dem Mac zum Beispiel über `brew install python`.
+
+## So funktioniert die Bedienung
+
+1. **Persönliche Daten** eingeben: Name, Adresse, E-Mail, IBAN, Abonummer des Tickets.
+   Mit „Profil speichern“ merkt sich die App alles für das nächste Mal. Gespeichert wird nur
+   lokal in einer kleinen Datei unter `~/.config/dticket-refund/`.
+2. **Monat** wählen. Beantragt werden kann immer nur ein abgeschlossener Monat, höchstens
+   zwölf Monate zurück.
+3. **Strecken** eintragen: Start und Ziel (aus der Vorschlagsliste auswählen), ungefähre
+   Abfahrtszeit hin und zurück, wie groß das Zeitfenster darum sein soll, an welchen Wochentagen
+   du fährst und an welchen Tagen nicht (Urlaub, Homeoffice). Bis zu drei Strecken sind möglich,
+   etwa für Wochenendfahrten oder einen zweiten Arbeitsort.
+4. **Verspätungen suchen.** Die App prüft jeden Fahrtag in beide Richtungen. Beim ersten Mal
+   lädt sie dafür die Daten des Monats herunter, das dauert je nach Verbindung ein bis zwei Minuten.
+5. **Ergebnis prüfen.** Du siehst den Erstattungsbetrag und eine Liste aller gefundenen
+   Verspätungen. Die App hat bereits eine sinnvolle Auswahl angehakt. **Haken bedeutet: wird
+   eingereicht.** Entferne den Haken bei Fahrten, die du an dem Tag nicht gefahren bist, und
+   klicke „Neu berechnen“. Es darf nur eingereicht werden, was du wirklich gefahren bist.
+6. **Versenden.** „In Apple Mail öffnen“ erzeugt eine fertige E-Mail mit Empfänger, Text und
+   dem Antrag als PDF im Anhang. Alternativ kannst du das PDF herunterladen, eine .eml-Datei
+   für Outlook oder Thunderbird erzeugen oder einen mailto-Link nutzen.
+
+## Wie die Entschädigung berechnet wird
+
+Grundlage sind die Tarifbedingungen des Deutschlandtarifs (Teil C, Nr. 8.1) und die
+EU-Fahrgastrechteverordnung. In Kurzform:
+
+| Regel | Was sie bedeutet |
 |---|---|
-| Einzelfall ab 60 min Verspätung am Ziel (auch Ausfall, Anschlussverlust) | 1,50 EUR je Fall |
-| Sammelregel: Fälle von 20–59 min im Monat addiert | 1,50 EUR je volle 60 min dieser Summe, zusätzlich zu den Einzelfällen |
-| Kappung | 25 % des Ticketpreises (63 EUR → 15,75 EUR) |
-| Bagatellgrenze | Auszahlung nur, wenn Anspruch > 4,00 EUR (ab 3 Einheiten) |
-| Ticketpreis | 49 EUR (05/2023–12/2024), 58 EUR (2025), 63 EUR (2026) |
-| Frist | Beschwerde binnen 3 Monaten (Art. 28 VO 2021/782); DB akzeptiert 12 Monate; Verjährung 1 Jahr |
+| Verspätungsfall | Kommt dein Zug am Ziel 60 Minuten oder mehr zu spät an oder fällt aus, gibt es 1,50 EUR. Egal wie lang die Verspätung war, ein Fall ist ein Fall. |
+| Kurze Verspätungen | Verspätungen zwischen 20 und 59 Minuten dürfen im Monat zusammengerechnet werden. Je volle 60 Minuten dieser Summe gibt es 1,50 EUR extra. |
+| Obergrenze | Mehr als 25 % des Ticketpreises gibt es pro Monat nicht. Bei 63 EUR sind das 15,75 EUR. |
+| Bagatellgrenze | Ausgezahlt wird nur, wenn der Anspruch über 4 EUR liegt. Dafür braucht man mindestens drei Fälle. |
+| Ticketpreis | 49 EUR bis Ende 2024, 58 EUR in 2025, 63 EUR seit 2026. Die App setzt ihn automatisch. |
+| Frist | Am besten innerhalb von drei Monaten einreichen; die Bahn nimmt Anträge bis zu zwölf Monate an. |
 
-Die App berechnet beide Rechenwege und nimmt den mit dem höheren Betrag. Ein Fall ist dabei
-immer ein Fall: Eine Verspätung ab 60 Minuten bringt genau 1,50 EUR, egal wie lang sie war
-(ein Zug mit 440 Minuten wird nicht in sieben Stunden aufgeteilt). Zusammengerechnet werden nur
-die Fälle zwischen 20 und 59 Minuten. Bei Zugausfällen wird
-die Ankunft mit dem nächsten gefahrenen Zug angesetzt, ohne Folgezug pauschal 60 Minuten.
+Bei einem Zugausfall zählt die Ankunft mit dem nächsten Zug, der tatsächlich gefahren ist.
+Findet die App keinen Folgezug, setzt sie pauschal 60 Minuten an und markiert den Fall.
 
-Auswahl der Fahrten (`optimizer.py`):
+## Wie die App die Fahrten auswählt
 
-- Plausibilität: pro Tag höchstens eine Hin- und eine Rückfahrt; die Rückfahrt fährt erst nach
-  der tatsächlichen Ankunft der Hinfahrt ab und gehört zur selben Strecke.
-- Verteilung: gewählt wird jeweils die Fahrt mit dem größten Tagesabstand zur bisherigen Auswahl
-  (bei Gleichstand die längere Verspätung), bis die Kappung erreicht ist.
-- Umfang: eingereicht wird nur, was für den Betrag nötig ist; zehn weitere Fahrten stehen als
-  Reserve bereit und rücken nach, wenn der Nutzer eingereichte Fahrten streicht. Alles andere
-  wird verworfen.
+Damit der Antrag glaubwürdig ist und nicht mehr Fahrten enthält als nötig, gelten Regeln:
 
-## Empfänger
+- Pro Tag höchstens eine Hinfahrt und eine Rückfahrt. Die Rückfahrt muss nach der Ankunft der
+  Hinfahrt abfahren und auf derselben Strecke liegen.
+- Die Fahrten werden möglichst gleichmäßig über den Monat verteilt statt an wenigen Tagen gehäuft.
+- Es kommen immer auch ein paar kurze Verspätungen (20 bis 59 Minuten) in den Antrag, die
+  zusammengerechnet werden, sofern es welche gibt.
+- Eingereicht wird nur so viel, wie für die Obergrenze nötig ist. Alle weiteren gefundenen
+  Verspätungen stehen ohne Haken in der Liste und lassen sich bei Bedarf anhaken.
+- Fälle, die die Bahn anders bewerten könnte, sind mit ⚠ markiert: Verspätungen knapp über
+  20 oder 60 Minuten und pauschal angesetzte Ausfälle. Die App bevorzugt robuste Fälle.
 
-Die DB nennt offiziell nur den Postweg (DB Fernverkehr AG, Servicecenter Fahrgastrechte,
-60647 Frankfurt am Main) und das Online-Formular im DB-Kundenkonto. Eine offizielle
-E-Mail-Adresse des Servicecenters existiert nicht. Anträge per E-Mail sind wirksam
-(AG Frankfurt a. M., 29 C 599/23) und werden intern weitergeleitet; voreingestellt ist
-`zentralerkundendialog@bahn.de`. Anderer Empfänger, z. B. bei einem Verbund-Ticket:
+## Woher die Verspätungsdaten kommen
+
+Die Bahn bietet keine Schnittstelle an, über die man Verspätungen rückwirkend für einen ganzen
+Monat abfragen kann. Deshalb nutzt die App ein frei verfügbares Archiv: Der Datensatz
+[piebro/deutsche-bahn-data](https://huggingface.co/datasets/piebro/deutsche-bahn-data)
+(Lizenz CC BY 4.0, Daten der Deutschen Bahn) fragt rund um die Uhr die offizielle Echtzeit-
+Schnittstelle der Bahn ab, also dieselben Daten, die auch die Anzeigetafeln an den Bahnhöfen
+speisen, und stellt daraus für jeden Monat eine Datei mit allen Zughalten in Deutschland bereit.
+
+Was das für dich bedeutet:
+
+- **Download nur einmal pro Monat.** Die Datei eines Monats ist etwa 600 MB groß (für Monate
+  vor November 2025 etwa 100 MB) und wird unter `~/.cache/dticket-refund/` gespeichert. Alle
+  weiteren Suchen in diesem Monat dauern nur Sekunden.
+- **Automatisches Aufräumen.** Es bleiben immer nur die drei zuletzt geladenen Monate liegen.
+  Ältere Dateien löscht die App nach einem neuen Download selbst. Wer mehr behalten möchte,
+  setzt die Umgebungsvariable `DTICKET_REFUND_BEHALTE_MONATE`, zum Beispiel auf 6.
+- **Selbst löschen ist erlaubt.** Du kannst den Ordner `~/.cache/dticket-refund/` jederzeit
+  leeren. Fehlt eine Datei, lädt die App sie beim nächsten Suchen einfach neu. Beschädigte
+  oder halb heruntergeladene Dateien erkennt sie, löscht sie und meldet, dass die Suche
+  wiederholt werden soll.
+- **Der Vormonat ist erst nach ein paar Tagen komplett.** Wer am 1. des Monats sucht, bekommt
+  eventuell noch die Meldung, dass die Daten noch nicht vorliegen.
+- **Grenzen der Daten.** Vor November 2025 enthält das Archiv nur die rund 100 größten Bahnhöfe.
+  Vereinzelt fehlen ganze Stunden; die App zeigt an, wenn eine solche Lücke in dein Pendelfenster
+  fällt. Es werden nur Direktverbindungen gefunden, keine Umsteigeverbindungen.
+
+Für Entwickler: Die Auswertung läuft lokal mit DuckDB direkt auf der Parquet-Datei
+(`dticket_refund/sources/archiv.py`). Andere Datenquellen lassen sich über das
+`DelayProvider`-Protokoll in `provider.py` ergänzen.
+
+## Wohin der Antrag geht
+
+Die Bahn nennt offiziell nur zwei Wege: das Online-Formular im DB-Kundenkonto und den Postweg
+an das Servicecenter Fahrgastrechte, 60647 Frankfurt am Main. Eine offizielle E-Mail-Adresse
+des Servicecenters gibt es nicht. Anträge per E-Mail sind trotzdem wirksam (Amtsgericht
+Frankfurt, Urteil 29 C 599/23) und werden intern weitergeleitet. Voreingestellt ist deshalb
+die Adresse des Zentralen Kundendialogs der Bahn, `zentralerkundendialog@bahn.de`, die auch
+andere Tools nutzen. Wer auf Nummer sicher gehen will, überträgt die Fahrten aus dem PDF ins
+Online-Formular oder schickt das PDF per Post.
+
+Hast du das Ticket nicht bei der Bahn, sondern bei einem Verkehrsverbund gekauft, ist dieser
+zuständig. Den Empfänger kannst du beim Start ändern:
 
 ```sh
 DTICKET_REFUND_EMPFAENGER=fahrgastrechte@beispiel-verbund.de .venv/bin/dticket-refund
 ```
 
-## Datenquelle
-
-Historische Echtzeitdaten gibt es bei der DB nicht per API: transport.rest, bahn.de und die
-DB-Marketplace-APIs liefern nur Live-Daten, bahn.expert maximal 7 Tage zurück, zugfinder.net
-nur gegen Bezahlung und ohne öffentliche API. Die App nutzt deshalb das Open-Data-Archiv
-[piebro/deutsche-bahn-data](https://huggingface.co/datasets/piebro/deutsche-bahn-data)
-(CC BY 4.0, Daten: Deutsche Bahn), das die DB-Timetables-API für alle Bahnhöfe pollt und pro
-Monat eine Parquet-Datei mit Soll-/Ist-Zeiten und Ausfällen bereitstellt.
-
-- Pro Monat wird die Datei einmal nach `~/.cache/dticket-refund/` geladen (100 MB bis 10/2025,
-  danach ca. 600 MB) und mit DuckDB in unter zwei Sekunden für die ganze Strecke ausgewertet.
-- Direktverbindungen ergeben sich aus dem Join von Abfahrt am Start und Ankunft am Ziel über
-  den Fahrt-Schlüssel; gleichnamige Bahnhofsteile (Fernbahn/S-Bahn) werden zusammengefasst.
-- Fernverkehr (ICE/IC/EC/FLX …) wird ausgeschlossen, alle übrigen Zuggattungen gelten als Nahverkehr.
-- Bis 10/2025 enthält das Archiv nur die rund 100 größten Bahnhöfe; einzelne Stunden fehlen
-  (Poll-Lücken). Der Vormonat ist in den ersten Tagen des Folgemonats vollständig.
-- Die Bahnhofsliste für die Autovervollständigung wird aus dem zuletzt geladenen Monat gebaut.
-
-Andere Datenquellen lassen sich über das `DelayProvider`-Protokoll in `provider.py` ergänzen.
-
 ## Apple Mail
 
-„In Apple Mail öffnen“ steuert Mail per AppleScript. Beim ersten Mal fragt macOS, ob Python
-Mail steuern darf; den Dialog bestätigen (Systemeinstellungen → Datenschutz & Sicherheit →
-Automation) und erneut klicken. Ohne Mail.app die .eml-Datei nutzen.
+Der Knopf „In Apple Mail öffnen“ steuert Mail per AppleScript. Beim ersten Mal fragt macOS,
+ob Python das Programm Mail steuern darf. Diesen Dialog bestätigen und noch einmal klicken.
+Wer kein Apple Mail nutzt, nimmt die .eml-Datei.
 
-## Tests
+## Für Entwickler
 
 ```sh
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q                                   # Tests
+.venv/bin/dticket-refund suche "Frankfurt Hbf" "Darmstadt Hbf" 2026-08   # Suche im Terminal
 ```
+
+Aufbau: `models.py` (Datenmodell), `rules.py` (Tarifregeln), `optimizer.py` (Auswahl der
+Fahrten), `search.py` (Monatssuche), `sources/archiv.py` (Datenquelle), `pdfgen.py`,
+`mailout.py`, `web.py` (Oberfläche), `cli.py`.

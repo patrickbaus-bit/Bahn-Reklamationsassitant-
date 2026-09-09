@@ -90,3 +90,34 @@ async def test_luecken_erkennung(archiv):
     # Testdaten haben Halte am 3.8. (06:xx-08:xx) und 4.8. 07:xx -> dazwischen fehlen Stunden
     assert luecken and all(l.minute == 0 for l in luecken)
     assert datetime(2026, 8, 3, 12, 0) in luecken and datetime(2026, 8, 3, 7, 0) not in luecken
+
+
+async def test_aufraeumen_behaelt_nur_juengste_monate(archiv):
+    for m in ("2025-09", "2025-10", "2026-05", "2026-06"):
+        (archiv.cache_dir / f"data-{m}.parquet").write_bytes(b"alt")
+    (archiv.cache_dir / "data-2026-07.parquet.part").write_bytes(b"abgebrochen")
+    geloescht = archiv.aufraeumen(behalte=3)
+    bleiben = sorted(p.name for p in archiv.cache_dir.glob("data-*.parquet"))
+    assert bleiben == ["data-2026-05.parquet", "data-2026-06.parquet", "data-2026-08.parquet"]
+    assert not list(archiv.cache_dir.glob("*.part")) and len(geloescht) == 3
+
+
+async def test_beschaedigte_datei_wird_entfernt(archiv):
+    kaputt = archiv.datei(date(2026, 8, 1))
+    kaputt.write_bytes(b"kein parquet")
+    with pytest.raises(RuntimeError, match="gelöscht"):
+        await archiv.fahrten(Station("8000001", "A"), Station("8000002", "B"), date(2026, 8, 3), "hin")
+    assert not kaputt.exists()
+
+
+async def test_geloeschte_datei_wird_neu_geladen(archiv, monkeypatch):
+    a, b = Station("8000001,8098001", "A Hbf"), Station("8000002", "B Hbf")
+    assert len(await archiv.fahrten(a, b, date(2026, 8, 3), "hin")) == 3   # fuellt den Zwischenspeicher
+    archiv.datei(date(2026, 8, 1)).unlink()
+    aufrufe = []
+    async def fake_download(monat, ziel):
+        aufrufe.append(monat); raise FileNotFoundError("Archiv nicht da")
+    monkeypatch.setattr(archiv, "_download", fake_download)
+    with pytest.raises(FileNotFoundError):
+        await archiv.fahrten(a, b, date(2026, 8, 3), "hin")
+    assert aufrufe == [date(2026, 8, 1)]                                    # Download wurde neu angestossen

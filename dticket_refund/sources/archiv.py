@@ -30,6 +30,8 @@ log = logging.getLogger(__name__)
 
 BASIS_URL = "https://huggingface.co/datasets/piebro/deutsche-bahn-data/resolve/main/monthly_processed_data"
 CACHE_DIR = Path(os.environ.get("DTICKET_REFUND_CACHE", Path.home() / ".cache" / "dticket-refund"))
+# So viele Monatsdateien bleiben im Cache; aeltere werden nach einem neuen Download geloescht.
+BEHALTE_MONATE = int(os.environ.get("DTICKET_REFUND_BEHALTE_MONATE", "3"))
 
 # Fernverkehr und Nicht-Zuege sind nicht mit dem Deutschlandticket nutzbar; alles andere
 # (RE, RB, S, HLB, VIA, ME, NWB, ...) gilt als Nahverkehr.
@@ -100,9 +102,35 @@ class ArchivQuelle:
                         f.write(chunk)
                         geladen += len(chunk)
                         self.download_status[key] = (geladen, gesamt)
+        self._pruefe_datei(tmp)          # beschaedigte/abgebrochene Downloads nicht uebernehmen
         tmp.replace(ziel)
         self.download_status.pop(key, None)
+        self.aufraeumen()
         return ziel
+
+    @staticmethod
+    def _pruefe_datei(pfad: Path) -> None:
+        import duckdb
+        try:
+            duckdb.connect().execute("SELECT count(*) FROM parquet_schema(?)", [str(pfad)]).fetchone()
+        except Exception as e:
+            pfad.unlink(missing_ok=True)
+            raise RuntimeError(f"Archivdatei {pfad.name} ist beschädigt und wurde gelöscht - bitte Suche wiederholen. ({e})")
+
+    def aufraeumen(self, behalte: int = BEHALTE_MONATE) -> list[Path]:
+        """Loescht alte Monatsdateien (nur die juengsten ``behalte`` bleiben) und Download-Reste."""
+        geloescht = []
+        for rest in self.cache_dir.glob("*.part"):
+            rest.unlink(missing_ok=True)
+            geloescht.append(rest)
+        monate = self.vorhandene_monate()
+        for monat in monate[:-behalte] if behalte > 0 else []:
+            pfad = self.datei(monat)
+            pfad.unlink(missing_ok=True)
+            self._monat_cache = {k: v for k, v in self._monat_cache.items() if k[0] != monat and k[-1] != monat}
+            geloescht.append(pfad)
+            log.info("Alte Archivdatei geloescht: %s", pfad.name)
+        return geloescht
 
     # ---- Abfragen --------------------------------------------------------------------------
     def _abfrage(self, pfad: Path, start: Station, ziel: Station, richtung: str) -> list[Fahrt]:
@@ -133,7 +161,11 @@ class ArchivQuelle:
         WHERE fahrt <> '' AND an.pos > ab.pos AND an.soll_an > ab.soll_ab
         ORDER BY ab.soll_ab
         """
-        rows = duckdb.connect().execute(sql, [str(pfad), *s_evas, *z_evas, *s_evas, *z_evas]).fetchall()
+        try:
+            rows = duckdb.connect().execute(sql, [str(pfad), *s_evas, *z_evas, *s_evas, *z_evas]).fetchall()
+        except Exception as e:   # z.B. von Hand halb geloescht oder beschaedigt
+            pfad.unlink(missing_ok=True)
+            raise RuntimeError(f"Archivdatei {pfad.name} war nicht lesbar und wurde gelöscht - bitte Suche wiederholen. ({e})")
         fahrten: list[Fahrt] = []
         gesehen: set[tuple] = set()
         for typ, nr, linie, soll_ab, ist_ab, ab_ausfall, soll_an, ist_an, an_ausfall in rows:
@@ -176,6 +208,8 @@ class ArchivQuelle:
 
     async def fahrten(self, start: Station, ziel: Station, tag: date, richtung: str) -> list[Fahrt]:
         monat = tag.replace(day=1)
+        if not self.vorhanden(monat):             # von Hand geloescht? -> Zwischenspeicher verwerfen, neu laden
+            self._monat_cache = {k: v for k, v in self._monat_cache.items() if k[0] != monat and k[-1] != monat}
         pfad = await self.lade_monat(monat)
         key = (monat, start.id, ziel.id)
         if key not in self._monat_cache:
