@@ -101,7 +101,10 @@ def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg
     if auffuellen:
         if rechenweg == "sammeln":
             # Ein paar kurze Faelle (20-59 min) gehoeren immer dazu - sie werden zusammengerechnet.
-            kurze = [f for f in passende if f.verspaetung_min < regeln.schwelle_einzelfall_min]
+            # ... aber keine, die einem langen Fall am selben Tag in derselben Richtung den Platz nehmen.
+            lange_slots = {(f.datum, f.richtung) for f in passende if f.verspaetung_min >= regeln.schwelle_einzelfall_min}
+            kurze = [f for f in passende if f.verspaetung_min < regeln.schwelle_einzelfall_min
+                     and (f.datum, f.richtung) not in lange_slots]
             anzahl_kurze = lambda g: sum(1 for f in g if f.verspaetung_min < regeln.schwelle_einzelfall_min)
             _greedy(kurze, gewaehlt, lambda g: anzahl_kurze(g) >= MIN_KURZE, MIN_KURZE)
         _greedy(passende, gewaehlt, lambda g: zaehle([f.verspaetung_min for f in g]) >= ziel, len(passende))
