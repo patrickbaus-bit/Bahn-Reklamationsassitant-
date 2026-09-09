@@ -220,7 +220,9 @@ async def abwaehlen(request: Request, job_id: str):
     """Der Nutzer streicht Fahrten, die er nicht gefahren ist (nur echte Fahrten einreichen!)."""
     j = _job(job_id)
     form = await request.form()
-    j.abgewaehlt = {int(i) for i in form.getlist("index")}
+    gefahren = {int(i) for i in form.getlist("gefahren")}
+    kandidaten = {i for i, f in enumerate(j.alle) if f.sammelbar}
+    j.abgewaehlt = kandidaten - gefahren
     _berechne(j)
     return RedirectResponse(f"/ergebnis/{job_id}", status_code=303)
 

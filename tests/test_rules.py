@@ -100,6 +100,14 @@ def test_sammelregel_stoppt_an_der_kappung_und_verteilt():
     assert max(b - a for a, b in zip(tage, tage[1:])) <= 3
 
 
+def test_reserve_kommt_auch_aus_kurzen_faellen():
+    fahrten = [_fahrt(t, "hin", 60 + t) for t in range(1, 12)]         # genau 11 Faelle >= 60 -> Kappung
+    fahrten += [_fahrt(t, "hin", 30) for t in range(12, 18)]           # 6 kurze
+    antrag = optimiere(*_rahmen(), fahrten)
+    assert antrag.rechenweg == "einzelfall" and len(antrag.fahrten) == 11
+    assert len(antrag.reserve) == 6 and antrag.verworfen == []
+
+
 def test_plausibilitaet_rueckfahrt_nach_hinfahrt_und_gleiche_strecke():
     hin = _fahrt(5, "hin", 90)                                   # A -> B, an 08:15 + 90 = 09:45
     zu_frueh = Fahrt(date(2026, 8, 5), "rueck", "RE 2", "B", "A", datetime(2026, 8, 5, 9, 0),

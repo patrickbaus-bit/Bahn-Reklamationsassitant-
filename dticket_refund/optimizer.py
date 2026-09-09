@@ -86,7 +86,9 @@ def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg
     gewaehlt: list[Fahrt] = []
     _greedy(passende, gewaehlt, lambda g: zaehle([f.verspaetung_min for f in g]) >= ziel, len(passende))
     eingereicht = list(gewaehlt)
-    reserve = _greedy(passende, gewaehlt, lambda g: False, RESERVE)
+    # Reserve aus allen Kandidaten ab 20 min: faellt eine lange Verspaetung weg, kann die
+    # Neuberechnung auf die Sammelregel wechseln und kurze Faelle brauchen.
+    reserve = _greedy(kandidaten, gewaehlt, lambda g: False, RESERVE)
     return eingereicht, reserve, zaehle([f.verspaetung_min for f in eingereicht])
 
 
