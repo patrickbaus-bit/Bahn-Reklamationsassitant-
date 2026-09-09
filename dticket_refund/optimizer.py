@@ -63,13 +63,15 @@ def _abstand(f: Fahrt, gewaehlt: list[Fahrt]) -> int:
 def _greedy(kandidaten: list[Fahrt], gewaehlt: list[Fahrt], fertig, maximal: int) -> list[Fahrt]:
     """Nimmt Fahrten auf, bis ``fertig(gewaehlt)`` gilt oder ``maximal`` neue erreicht sind.
 
-    Bevorzugt den Kandidaten mit dem groessten Tagesabstand zur bisherigen Auswahl,
-    bei Gleichstand den mit der laengsten Verspaetung. Unvertraegliche fallen weg.
+    Bevorzugt Faelle ab 60 Minuten (eine Einheit je Fahrt) vor kurzen, darunter den
+    Kandidaten mit dem groessten Tagesabstand zur bisherigen Auswahl, bei Gleichstand
+    den mit der laengsten Verspaetung. Unvertraegliche fallen weg.
     """
     offen = [f for f in kandidaten if f not in gewaehlt]
     neu: list[Fahrt] = []
     while offen and len(neu) < maximal and not fertig(gewaehlt):
-        offen.sort(key=lambda f: (-_abstand(f, gewaehlt), -f.verspaetung_min, f.datum, f.soll_ab))
+        offen.sort(key=lambda f: (f.verspaetung_min < 60, -_abstand(f, gewaehlt), -f.verspaetung_min,
+                                  f.datum, f.soll_ab))
         f = offen.pop(0)
         if vertraeglich(f, gewaehlt):
             gewaehlt.append(f)
