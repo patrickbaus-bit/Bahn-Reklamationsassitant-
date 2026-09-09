@@ -6,7 +6,7 @@
   <div class="zeile">
     <div><div class="klein">Erstattungsbetrag</div><div class="betrag">{{ antrag.betrag_eur|eur }}</div></div>
     <div class="klein" style="margin-left:24px">
-      {% if antrag.rechenweg == 'sammeln' %}Sammelregel: {{ antrag.fahrten|length }} Fahrten ab 20 min = {{ antrag.einheiten }} Einheiten à 1,50 EUR{% else %}Einzelfallregel: {{ antrag.fahrten|length }} Fälle ab 60 min{% endif %} eingereicht<br>
+      {{ antrag.fahrten|length }} Fahrten = {{ antrag.einheiten }} Einheiten à 1,50 EUR eingereicht<br>
       Kappung: {{ regeln.kappung_eur(antrag.ticketpreis_eur)|eur }} ({{ (regeln.kappung_anteil*100)|int }} % von {{ antrag.ticketpreis_eur|eur }})<br>
       {{ puenktlich }} Fahrten im Zeitfenster waren pünktlich oder unter 20 min verspätet
     </div>

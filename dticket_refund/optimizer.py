@@ -23,6 +23,7 @@ from .models import Antrag, Fahrt, Pendelstrecke, Person, Ticket
 from .rules import REGELN, Regelwerk, ticketpreis
 
 RESERVE = 10
+MIN_KURZE = 3   # so viele Faelle von 20-59 min sollen (wenn vorhanden) immer dabei sein
 
 
 def _eur(x: float) -> str:
@@ -96,6 +97,11 @@ def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg
             continue
         (gewaehlt if vertraeglich(f, gewaehlt) else unplausibel).append(f)
     if auffuellen:
+        if rechenweg == "sammeln":
+            # Ein paar kurze Faelle (20-59 min) gehoeren immer dazu - sie werden zusammengerechnet.
+            kurze = [f for f in passende if f.verspaetung_min < regeln.schwelle_einzelfall_min]
+            anzahl_kurze = lambda g: sum(1 for f in g if f.verspaetung_min < regeln.schwelle_einzelfall_min)
+            _greedy(kurze, gewaehlt, lambda g: anzahl_kurze(g) >= MIN_KURZE, MIN_KURZE)
         _greedy(passende, gewaehlt, lambda g: zaehle([f.verspaetung_min for f in g]) >= ziel, len(passende))
     eingereicht = list(gewaehlt)
     # Reserve aus allen Kandidaten ab 20 min: faellt eine lange Verspaetung weg, kann die
@@ -116,8 +122,8 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
 
     varianten = {w: _auswahl(kandidaten, regeln, preis, w, erzwungen, auffuellen) for w in ("einzelfall", "sammeln")}
     betraege = {w: regeln.betrag(v[2], preis) for w, v in varianten.items()}
-    # Bei Gleichstand gewinnt der Einzelfall-Weg (uebliches Verfahren, weniger Fahrten noetig).
-    rechenweg = "einzelfall" if betraege["einzelfall"] >= betraege["sammeln"] else "sammeln"
+    # Bei Gleichstand gewinnt die Sammelregel, damit auch kurze Faelle in den Antrag kommen.
+    rechenweg = "sammeln" if betraege["sammeln"] >= betraege["einzelfall"] else "einzelfall"
     eingereicht, reserve, einheiten, unplausibel = varianten[rechenweg]
     nach_zeit = lambda f: (f.datum, f.soll_ab)
     eingereicht.sort(key=nach_zeit)
@@ -134,14 +140,15 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
             f"Der Anspruch ({einheiten} x {_eur(regeln.pauschale_eur)}) liegt nicht über der "
             f"Bagatellgrenze von {_eur(regeln.bagatellgrenze_eur)} - es wird nichts ausgezahlt. "
             f"Ab {regeln.min_einheiten()} Einheiten im Monat lohnt sich der Antrag.")
-    if rechenweg == "sammeln" and betraege["sammeln"] > betraege["einzelfall"]:
-        minuten = [f.verspaetung_min for f in eingereicht]
+    minuten = [f.verspaetung_min for f in eingereicht]
+    kurz = regeln.kurze_minuten(minuten)
+    if rechenweg == "sammeln" and kurz:
         lange = regeln.einheiten_einzelfall(minuten)
-        kurz = regeln.kurze_minuten(minuten)
+        anzahl_kurz = sum(1 for m in minuten if m < regeln.schwelle_einzelfall_min)
         hinweise.append(
-            f"Sammelregel (Teil C Nr. 8.1 Deutschlandtarif) gewählt: {lange} Fälle ab 60 Minuten je eine Einheit, "
-            f"dazu {kurz} Minuten aus Verspätungen zwischen 20 und 59 Minuten = {kurz // 60} weitere Einheit(en). "
-            f"Nur die Einzelfallregel hätte {_eur(betraege['einzelfall'])} ergeben.")
+            f"Sammelregel (Teil C Nr. 8.1 Deutschlandtarif): {lange} Fälle ab 60 Minuten je eine Einheit, dazu "
+            f"{anzahl_kurz} Fälle zwischen 20 und 59 Minuten mit zusammen {kurz} Minuten = {kurz // 60} weitere "
+            f"Einheit(en)" + (f", {kurz % 60} Minuten Rest" if kurz % 60 else "") + ".")
     if unplausibel:
         hinweise.append(
             f"{len(unplausibel)} angehakte Fahrt(en) wurden nicht übernommen, weil sie nicht zu anderen Fahrten "

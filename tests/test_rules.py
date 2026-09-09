@@ -55,8 +55,7 @@ def test_optimierer_eine_fahrt_pro_tag_und_richtung_und_kappt():
     fahrten.append(_fahrt(20, "hin", 19))                           # zu wenig, auch zum Sammeln
     fahrten.append(_fahrt(21, "hin", 0, ausgefallen=True))          # Ausfall zaehlt
     antrag = optimiere(*_rahmen(), fahrten)
-    assert antrag.rechenweg == "einzelfall"
-    assert len(antrag.fahrten) == 11
+    assert len(antrag.fahrten) == 11                                  # keine kurzen Faelle vorhanden
     assert antrag.betrag_eur == 15.75
     assert antrag.ticketpreis_eur == 63.0
     # Am 1.8. nur eine Hinfahrt, und zwar die laengere
@@ -100,12 +99,24 @@ def test_sammelregel_stoppt_an_der_kappung_und_verteilt():
     assert max(b - a for a, b in zip(tage, tage[1:])) <= 3
 
 
-def test_reserve_kommt_auch_aus_kurzen_faellen():
-    fahrten = [_fahrt(t, "hin", 60 + t) for t in range(1, 12)]         # genau 11 Faelle >= 60 -> Kappung
+def test_kurze_faelle_sind_immer_dabei():
+    fahrten = [_fahrt(t, "hin", 60 + t) for t in range(1, 12)]         # 11 Faelle >= 60 wuerden allein reichen
     fahrten += [_fahrt(t, "hin", 30) for t in range(12, 18)]           # 6 kurze
     antrag = optimiere(*_rahmen(), fahrten)
-    assert antrag.rechenweg == "einzelfall" and len(antrag.fahrten) == 11
-    assert len(antrag.reserve) == 6 and antrag.verworfen == []
+    assert antrag.rechenweg == "sammeln" and antrag.betrag_eur == 15.75
+    kurze = [f for f in antrag.fahrten if f.verspaetung_min < 60]
+    assert len(kurze) >= 3                                             # mindestens drei kurze dabei
+    # 3 x 30 = 90 min -> 1 Einheit, also nur noch 10 lange noetig
+    assert sum(1 for f in antrag.fahrten if f.verspaetung_min >= 60) == 10
+    assert antrag.einheiten == 11
+    assert len(antrag.reserve) == 17 - len(antrag.fahrten) and antrag.verworfen == []
+    assert any("Sammelregel" in h and "Rest" in h for h in antrag.hinweise)
+
+
+def test_ohne_kurze_faelle_bleibt_einzelfall():
+    antrag = optimiere(*_rahmen(), [_fahrt(t, "hin", 70) for t in range(1, 6)])
+    assert antrag.rechenweg == "sammeln" and antrag.einheiten == 5 and antrag.betrag_eur == 7.5
+    assert not any("Sammelregel" in h for h in antrag.hinweise)        # kein Hinweis ohne kurze Faelle
 
 
 def test_plausibilitaet_rueckfahrt_nach_hinfahrt_und_gleiche_strecke():
