@@ -16,12 +16,14 @@
 </div>
 
 <div class="karte">
-  <h2>Gefundene Verspätungen</h2>
-  <p class="klein"><b>Haken entfernen</b> bei Fahrten, die Sie an dem Tag <b>nicht</b> gefahren sind, dann „Neu berechnen“: die Reserve rückt nach. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. Pro Tag höchstens eine Hin- und eine Rückfahrt (Rückfahrt erst nach Ankunft, gleiche Strecke); die Auswahl ist möglichst weit über den Monat verteilt. „Ist an –“ bedeutet Zugausfall ohne erkennbaren Folgezug; dafür werden pauschal 60 Minuten angesetzt.</p>
+  <h2>Gefundene Verspätungen ({{ kandidaten|length }})</h2>
+  <p class="klein">Alle Fahrten ab 20 Minuten Verspätung im Zeitfenster. <b>Haken = wird eingereicht.</b> Die Vorauswahl ist automatisch: pro Tag höchstens eine Hin- und eine Rückfahrt (Rückfahrt erst nach Ankunft, gleiche Strecke), möglichst weit über den Monat verteilt, nur so viele wie für den Betrag nötig. Haken entfernen bei Fahrten, die Sie nicht gefahren sind; Haken setzen, um eine Fahrt zusätzlich einzureichen. Es darf nur eingereicht werden, was tatsächlich gefahren wurde. „Ist an –“ bedeutet Zugausfall ohne erkennbaren Folgezug; dafür werden pauschal 60 Minuten angesetzt.</p>
   <form method="post" action="/ergebnis/{{ job_id }}/abwaehlen">
-  {% macro zeile(i, f, status) %}
-    <tr class="{% if i in job.abgewaehlt %}aus{% endif %}">
-      <td><input type="checkbox" name="gefahren" value="{{ i }}" {% if i not in job.abgewaehlt %}checked{% endif %} title="gefahren"></td>
+  <table>
+    <tr><th title="Haken = einreichen">einreichen</th><th>Datum</th><th>Richtung</th><th>Zug</th><th>Von → Nach</th><th>Soll ab</th><th>Soll an</th><th>Ist an</th><th>Verspätung</th><th>Status</th></tr>
+    {% for i, f in kandidaten %}
+    <tr class="{% if i in gewaehlt %}an{% endif %}">
+      <td><input type="checkbox" name="einreichen" value="{{ i }}" {% if i in gewaehlt %}checked{% endif %}></td>
       <td>{{ f.datum|dt }} ({{ ['Mo','Di','Mi','Do','Fr','Sa','So'][f.datum.isoweekday()-1] }})</td>
       <td>{{ 'Hin' if f.richtung == 'hin' else 'Rück' }}</td>
       <td>{{ f.zug }}</td>
@@ -29,29 +31,15 @@
       <td>{{ f.soll_ab|dt('%H:%M') }}</td><td>{{ f.soll_an|dt('%H:%M') }}</td>
       <td>{% if f.ausgefallen %}{{ (f.ersatz_an|dt('%H:%M')) if f.ersatz_an else '–' }}{% else %}{{ f.ist_an|dt('%H:%M') }}{% endif %}</td>
       <td><b>{{ f.verspaetung_min }} min</b></td>
-      <td>{% if f.ausgefallen %}Ausfall{% if not f.ersatz_an %} (kein Folgezug){% endif %} · {% endif %}{% if i in job.abgewaehlt %}nicht gefahren{% else %}{{ status }}{% endif %}</td>
+      <td>{% if f.ausgefallen %}Ausfall{% if not f.ersatz_an %} (kein Folgezug){% endif %}{% if i in gewaehlt %} · {% endif %}{% endif %}{% if i in gewaehlt %}<b>eingereicht</b>{% endif %}</td>
     </tr>
-  {% endmacro %}
-  {% set kopf %}<tr><th title="Haken = gefahren">gefahren</th><th>Datum</th><th>Richtung</th><th>Zug</th><th>Von → Nach</th><th>Soll ab</th><th>Soll an</th><th>Ist an</th><th>Verspätung</th><th>Status</th></tr>{% endset %}
-
-  <h3 class="klein" style="margin:12px 0 4px">Eingereicht ({{ gewaehlt|length }})</h3>
-  <table>{{ kopf }}
-    {% for i, f in kandidaten if i in gewaehlt %}{{ zeile(i, f, '<b>eingereicht</b>'|safe) }}
-    {% else %}<tr><td colspan="10">Keine einreichbare Verspätung im Zeitfenster gefunden.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="10">Keine Verspätung ab 20 Minuten im Zeitfenster gefunden.</td></tr>{% endfor %}
   </table>
-
-  {% if reserve %}
-  <h3 class="klein" style="margin:16px 0 4px">Reserve ({{ reserve|length }}) – rückt nach, wenn Sie oben etwas streichen</h3>
-  <table>{{ kopf }}{% for i, f in kandidaten if i in reserve %}{{ zeile(i, f, 'Reserve') }}{% endfor %}</table>
-  {% endif %}
-
-  {% set verworfen = kandidaten|rejectattr(0, 'in', gewaehlt)|rejectattr(0, 'in', reserve)|list %}
-  {% if verworfen %}
-  <details style="margin-top:14px"><summary class="klein">Verworfen ({{ verworfen|length }}): nicht benötigt, unplausibel (zweite Fahrt gleicher Richtung am selben Tag, Rückfahrt vor Ankunft) oder von Ihnen als nicht gefahren markiert</summary>
-  <table>{{ kopf }}{% for i, f in verworfen %}{{ zeile(i, f, 'verworfen') }}{% endfor %}</table></details>
-  {% endif %}
-
-  <p style="margin-top:12px"><button class="knopf sekundaer" type="submit">Neu berechnen</button> <span class="klein">Nicht gefahrene Fahrten (ohne Haken) fallen aus dem Antrag, die Reserve rückt nach.</span></p>
+  <p class="zeile" style="margin-top:12px">
+    <button class="knopf" type="submit" name="modus" value="auffuellen">Neu berechnen &amp; automatisch auffüllen</button>
+    <button class="knopf sekundaer" type="submit" name="modus" value="nur_auswahl">Nur meine Haken einreichen</button>
+    <span class="klein">Auffüllen: Ihre Haken bleiben, abgehakte gelten als nicht gefahren, der Rest wird bis zur Kappung ergänzt.</span>
+  </p>
   </form>
 </div>
 

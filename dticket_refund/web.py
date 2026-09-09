@@ -58,7 +58,9 @@ class Job:
     fehler: list[str] = field(default_factory=list)
     antrag: Optional[Antrag] = None
     pdf: Optional[bytes] = None
-    abgewaehlt: set[int] = field(default_factory=set)   # Indizes in ``alle``, vom Nutzer gestrichen
+    abgewaehlt: set[int] = field(default_factory=set)   # Indizes in ``alle``, vom Nutzer abgehakt (nicht gefahren)
+    erzwungen: set[int] = field(default_factory=set)    # vom Nutzer angehakt
+    auffuellen: bool = True                             # automatisch bis zur Kappung ergaenzen
 
 
 JOBS: dict[str, Job] = {}
@@ -179,7 +181,9 @@ async def _laufe(job: Job):
 
 def _berechne(job: Job):
     fahrten = [f for i, f in enumerate(job.alle) if i not in job.abgewaehlt]
-    job.antrag = optimiere(job.person, job.ticket, job.strecken, fahrten)
+    erzwungen = [f for i, f in enumerate(job.alle) if i in job.erzwungen]
+    job.antrag = optimiere(job.person, job.ticket, job.strecken, fahrten, erzwungen=erzwungen,
+                           auffuellen=job.auffuellen)
     job.antrag.hinweise.extend(job.fehler[:5])
     job.pdf = erzeuge_pdf(job.antrag)
 
@@ -206,7 +210,7 @@ async def ergebnis(request: Request, job_id: str):
     gruppe = lambda liste: {i for i, f in enumerate(j.alle) if any(f is g for g in liste)}
     return templates.TemplateResponse(request, "ergebnis.html", {
         "job_id": job_id, "job": j, "antrag": a, "kandidaten": kandidaten,
-        "gewaehlt": gruppe(a.fahrten) if a else set(), "reserve": gruppe(a.reserve) if a else set(),
+        "gewaehlt": gruppe(a.fahrten) if a else set(),
         "regeln": REGELN, "mailto": mailto_link(j.antrag, config.EMPFAENGER_EMAIL) if j.antrag else "",
         "empfaenger": config.EMPFAENGER_EMAIL, "online_formular": config.ONLINE_FORMULAR_URL,
         "betreff": betreff(j.antrag) if j.antrag else "",
@@ -217,12 +221,24 @@ async def ergebnis(request: Request, job_id: str):
 
 @app.post("/ergebnis/{job_id}/abwaehlen")
 async def abwaehlen(request: Request, job_id: str):
-    """Der Nutzer streicht Fahrten, die er nicht gefahren ist (nur echte Fahrten einreichen!)."""
+    """Haken = einreichen. Zwei Modi:
+
+    * nur_auswahl: genau die angehakten Fahrten (Plausibilitaet wird geprueft).
+    * auffuellen:  angehakte bleiben; was vorher vorgeschlagen war und jetzt abgehakt ist,
+                   gilt als "nicht gefahren" und bleibt gesperrt; der Rest wird bis zur
+                   Kappung automatisch ergaenzt.
+    """
     j = _job(job_id)
     form = await request.form()
-    gefahren = {int(i) for i in form.getlist("gefahren")}
+    angehakt = {int(i) for i in form.getlist("einreichen")}
     kandidaten = {i for i, f in enumerate(j.alle) if f.sammelbar}
-    j.abgewaehlt = kandidaten - gefahren
+    vorher = {i for i, f in enumerate(j.alle) if j.antrag and any(f is g for g in j.antrag.fahrten)}
+    j.erzwungen = angehakt
+    j.auffuellen = form.get("modus") == "auffuellen"
+    if j.auffuellen:
+        j.abgewaehlt = (vorher - angehakt) | (j.abgewaehlt - angehakt)
+    else:
+        j.abgewaehlt = kandidaten - angehakt
     _berechne(j)
     return RedirectResponse(f"/ergebnis/{job_id}", status_code=303)
 

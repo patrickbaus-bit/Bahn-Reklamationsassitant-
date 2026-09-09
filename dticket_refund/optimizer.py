@@ -76,35 +76,49 @@ def _greedy(kandidaten: list[Fahrt], gewaehlt: list[Fahrt], fertig, maximal: int
     return neu
 
 
-def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg: str
-             ) -> tuple[list[Fahrt], list[Fahrt], int]:
-    """(eingereicht, reserve, einheiten) fuer einen Rechenweg."""
+def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg: str,
+             erzwungen: list[Fahrt], auffuellen: bool) -> tuple[list[Fahrt], list[Fahrt], int, list[Fahrt]]:
+    """(eingereicht, reserve, einheiten, unplausibel) fuer einen Rechenweg.
+
+    ``erzwungen`` (vom Nutzer angehakt) wird zuerst uebernommen - in der Reihenfolge der
+    laengsten Verspaetung, damit bei Konflikten die wertvollere Fahrt bleibt; was nicht zu
+    den anderen passt, landet in ``unplausibel``. Mit ``auffuellen`` wird danach bis zur
+    Kappung automatisch ergaenzt.
+    """
     schwelle = regeln.schwelle_einzelfall_min if rechenweg == "einzelfall" else regeln.schwelle_sammeln_min
     zaehle = regeln.einheiten_einzelfall if rechenweg == "einzelfall" else regeln.einheiten_sammeln
     passende = [f for f in kandidaten if f.verspaetung_min >= schwelle]
     ziel = regeln.max_einheiten(preis)
     gewaehlt: list[Fahrt] = []
-    _greedy(passende, gewaehlt, lambda g: zaehle([f.verspaetung_min for f in g]) >= ziel, len(passende))
+    unplausibel: list[Fahrt] = []
+    for f in sorted(erzwungen, key=lambda f: (-f.verspaetung_min, f.datum, f.soll_ab)):
+        if f.verspaetung_min < regeln.schwelle_sammeln_min:
+            continue
+        (gewaehlt if vertraeglich(f, gewaehlt) else unplausibel).append(f)
+    if auffuellen:
+        _greedy(passende, gewaehlt, lambda g: zaehle([f.verspaetung_min for f in g]) >= ziel, len(passende))
     eingereicht = list(gewaehlt)
     # Reserve aus allen Kandidaten ab 20 min: faellt eine lange Verspaetung weg, kann die
     # Neuberechnung auf die Sammelregel wechseln und kurze Faelle brauchen.
     reserve = _greedy(kandidaten, gewaehlt, lambda g: False, RESERVE)
-    return eingereicht, reserve, zaehle([f.verspaetung_min for f in eingereicht])
+    return eingereicht, reserve, zaehle([f.verspaetung_min for f in eingereicht]), unplausibel
 
 
 def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pendelstrecke],
               fahrten: list[Fahrt], regeln: Regelwerk = REGELN,
-              preis_eur: float | None = None) -> Antrag:
+              preis_eur: float | None = None, erzwungen: list[Fahrt] | None = None,
+              auffuellen: bool = True) -> Antrag:
     if isinstance(strecken, Pendelstrecke):
         strecken = [strecken]
     preis = preis_eur if preis_eur is not None else ticketpreis(ticket.monat)
     kandidaten = [f for f in fahrten if f.verspaetung_min >= regeln.schwelle_sammeln_min]
+    erzwungen = erzwungen or []
 
-    varianten = {w: _auswahl(kandidaten, regeln, preis, w) for w in ("einzelfall", "sammeln")}
+    varianten = {w: _auswahl(kandidaten, regeln, preis, w, erzwungen, auffuellen) for w in ("einzelfall", "sammeln")}
     betraege = {w: regeln.betrag(v[2], preis) for w, v in varianten.items()}
     # Bei Gleichstand gewinnt der Einzelfall-Weg (uebliches Verfahren, weniger Fahrten noetig).
     rechenweg = "einzelfall" if betraege["einzelfall"] >= betraege["sammeln"] else "sammeln"
-    eingereicht, reserve, einheiten = varianten[rechenweg]
+    eingereicht, reserve, einheiten, unplausibel = varianten[rechenweg]
     nach_zeit = lambda f: (f.datum, f.soll_ab)
     eingereicht.sort(key=nach_zeit)
     reserve.sort(key=nach_zeit)
@@ -128,11 +142,15 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
             f"Sammelregel (Teil C Nr. 8.1 Deutschlandtarif) gewählt: {lange} Fälle ab 60 Minuten je eine Einheit, "
             f"dazu {kurz} Minuten aus Verspätungen zwischen 20 und 59 Minuten = {kurz // 60} weitere Einheit(en). "
             f"Nur die Einzelfallregel hätte {_eur(betraege['einzelfall'])} ergeben.")
-    if reserve or rest:
+    if unplausibel:
+        hinweise.append(
+            f"{len(unplausibel)} angehakte Fahrt(en) wurden nicht übernommen, weil sie nicht zu anderen Fahrten "
+            f"desselben Tages passen (zweite Fahrt gleicher Richtung, Rückfahrt vor Ankunft oder andere Strecke): "
+            + ", ".join(f"{f.datum:%d.%m.} {f.zug}" for f in unplausibel[:6]) + ("…" if len(unplausibel) > 6 else "."))
+    if auffuellen and (reserve or rest):
         hinweise.append(
             f"{len(eingereicht)} Fahrten reichen für den Betrag; sie sind möglichst weit über den Monat verteilt. "
-            f"{len(reserve)} Fahrten stehen als Reserve bereit, falls Sie eingereichte Fahrten streichen"
-            + (f"; {len(rest)} weitere wurden verworfen." if rest else "."))
+            f"Weitere {len(reserve) + len(rest)} gefundene Verspätungen stehen ohne Haken in der Liste.")
     return Antrag(person=person, ticket=ticket, strecken=strecken, fahrten=eingereicht, reserve=reserve,
                   verworfen=rest, betrag_eur=betrag, ticketpreis_eur=preis, rechenweg=rechenweg,
                   einheiten=einheiten, hinweise=hinweise)
