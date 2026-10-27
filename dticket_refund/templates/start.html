@@ -77,24 +77,40 @@
 function autocomplete(feld) {
   const box = feld.parentElement.querySelector('.vorschlaege');
   const idFeld = document.getElementById(feld.dataset.id), nameFeld = document.getElementById(feld.dataset.name);
-  let timer;
+  let timer, liste = [], aktiv = -1;
+  const waehle = s => { feld.value = s.name; idFeld.value = s.id; nameFeld.value = s.name; box.hidden = true; };
+  const markiere = i => { aktiv = i; [...box.children].forEach((d, j) => d.classList.toggle('aktiv', j === i)); };
   feld.addEventListener('input', () => {
     idFeld.value = ''; nameFeld.value = '';
     clearTimeout(timer);
     timer = setTimeout(async () => {
-      if (feld.value.length < 2) { box.hidden = true; return; }
+      if (feld.value.length < 2) { box.hidden = true; liste = []; return; }
       const r = await fetch('/api/stationen?q=' + encodeURIComponent(feld.value));
-      const liste = await r.json();
+      liste = await r.json(); aktiv = -1;
       box.innerHTML = '';
       for (const s of liste) {
         const d = document.createElement('div'); d.textContent = s.name;
-        d.onclick = () => { feld.value = s.name; idFeld.value = s.id; nameFeld.value = s.name; box.hidden = true; };
+        // mousedown statt click: verhindert, dass das blur des Feldes die Liste vorher schliesst
+        d.addEventListener('mousedown', e => { e.preventDefault(); waehle(s); });
         box.appendChild(d);
       }
       box.hidden = liste.length === 0;
     }, 250);
   });
-  feld.addEventListener('blur', () => setTimeout(() => box.hidden = true, 200));
+  feld.addEventListener('keydown', e => {
+    if (box.hidden || !liste.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); markiere(Math.min(aktiv + 1, liste.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); markiere(Math.max(aktiv - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); waehle(liste[Math.max(aktiv, 0)]); }
+    else if (e.key === 'Escape') box.hidden = true;
+  });
+  // Ohne Auswahl verlassen: eindeutigen bzw. exakt passenden Vorschlag uebernehmen
+  feld.addEventListener('blur', () => {
+    box.hidden = true;
+    if (idFeld.value || !liste.length) return;
+    const genau = liste.find(s => s.name.toLowerCase() === feld.value.trim().toLowerCase());
+    if (genau || liste.length === 1) waehle(genau || liste[0]);
+  });
 }
 document.querySelectorAll('.bahnhof').forEach(autocomplete);
 
