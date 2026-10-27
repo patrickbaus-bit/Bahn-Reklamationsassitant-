@@ -26,6 +26,21 @@ Danach jedes Mal starten mit:
 Dann im Browser `http://127.0.0.1:8765/` öffnen. Voraussetzung ist Python 3.10 oder neuer,
 auf dem Mac zum Beispiel über `brew install python`.
 
+### Im eigenen App-Fenster statt im Browser (Mac)
+
+```sh
+.venv/bin/python -m dticket_refund.fenster
+```
+
+Öffnet die Oberfläche in einem eigenen Fenster. Schließt man das Fenster, wird das Programm
+komplett beendet. PDF und .eml landen im Download-Ordner und öffnen sich direkt in Vorschau
+bzw. Mail.
+
+Wer das per Doppelklick starten möchte, legt sich ein kleines App-Bundle an, zum Beispiel
+`Bahn-Bonus.app` auf dem Schreibtisch. Darin liegt unter `Contents/MacOS/Bahn-Bonus` ein
+ausführbares Skript, das in den Projektordner wechselt und diesen Befehl startet. Mit
+`--icon pfad/zum/icon.icns` zeigt das Dock ein eigenes Symbol.
+
 ## So funktioniert die Bedienung
 
 1. **Persönliche Daten** eingeben: Name, Adresse, E-Mail, IBAN, Abonummer des Tickets.
@@ -141,4 +156,4 @@ Wer kein Apple Mail nutzt, nimmt die .eml-Datei.
 
 Aufbau: `models.py` (Datenmodell), `rules.py` (Tarifregeln), `optimizer.py` (Auswahl der
 Fahrten), `search.py` (Monatssuche), `sources/archiv.py` (Datenquelle), `pdfgen.py`,
-`mailout.py`, `web.py` (Oberfläche), `cli.py`.
+`mailout.py`, `web.py` (Oberfläche), `fenster.py` (eigenes App-Fenster), `cli.py`.
