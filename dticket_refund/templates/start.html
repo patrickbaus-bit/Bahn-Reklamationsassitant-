@@ -1,8 +1,17 @@
 {% extends "base.html" %}
 {% block inhalt %}
 <form method="post" action="/suche" id="formular">
+{% set p = person %}
+{% set vollstaendig = gespeichert and p.vorname and p.nachname and p.strasse and p.plz and p.ort and p.email %}
 <div class="karte">
   <h2>1. Persönliche Daten <span class="klein">{% if gespeichert %}(aus gespeichertem Profil){% else %}(einmal eingeben, dann speichern){% endif %}</span></h2>
+  {% if vollstaendig %}
+  <div class="zeile" id="profil_kurz">
+    <button class="knopf sekundaer" type="button" id="profil_auf" aria-expanded="false" aria-controls="profil_felder">Persönliche Daten ▸</button>
+    <span class="klein">{{ p.vorname }} {{ p.nachname }} · {{ p.plz }} {{ p.ort }} · {{ p.email }}{% if p.iban %} · IBAN …{{ p.iban.replace(' ', '')[-4:] }}{% endif %}</span>
+  </div>
+  {% endif %}
+  <div id="profil_felder" {% if vollstaendig %}hidden{% endif %}>
   <div class="raster">
     <div><label>Vorname</label><input name="vorname" required value="{{ person.vorname or '' }}"></div>
     <div><label>Nachname</label><input name="nachname" required value="{{ person.nachname or '' }}"></div>
@@ -17,6 +26,7 @@
   </div>
   <p class="zeile" style="margin-top:12px"><button class="knopf sekundaer" type="button" id="profil">Profil speichern</button>
   <span class="klein" id="profilstatus">Wird lokal in ~/.config/dticket-refund gespeichert (auch automatisch bei jeder Suche).</span></p>
+  </div>
 </div>
 
 <div class="karte">
@@ -122,6 +132,18 @@ document.querySelectorAll('.entfernen').forEach(a => a.onclick = e => {
   b.querySelectorAll('input[type=text],input:not([type]),input[type=hidden]').forEach(i => i.value = '');
   b.hidden = true; zeigeMehrKnopf();
 });
+
+// Persoenliche Daten: bei vollstaendigem Profil eingeklappt, Knopf klappt auf/zu
+const profilFelder = document.getElementById('profil_felder'), profilAuf = document.getElementById('profil_auf');
+function profilZeigen(offen) {
+  profilFelder.hidden = !offen;
+  if (profilAuf) { profilAuf.setAttribute('aria-expanded', offen); profilAuf.textContent = 'Persönliche Daten ' + (offen ? '▾' : '▸'); }
+}
+if (profilAuf) profilAuf.onclick = () => profilZeigen(profilFelder.hidden);
+// Ist ein (verstecktes) Pflichtfeld ungueltig, aufklappen, damit der Browser es zeigen kann
+document.getElementById('formular').addEventListener('invalid', e => {
+  if (profilFelder.contains(e.target) && profilFelder.hidden) { profilZeigen(true); setTimeout(() => e.target.reportValidity()); }
+}, true);
 
 document.getElementById('profil').onclick = async () => {
   const r = await fetch('/profil', {method: 'POST', body: new FormData(document.getElementById('formular'))});
