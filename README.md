@@ -114,7 +114,7 @@ EU-Fahrgastrechteverordnung. In Kurzform:
 | Kurze Verspätungen | Verspätungen zwischen 20 und 59 Minuten dürfen im Monat zusammengerechnet werden. Je volle 60 Minuten dieser Summe gibt es 1,50 EUR extra. |
 | Obergrenze | Mehr als 25 % des Ticketpreises gibt es pro Monat nicht. Bei 63 EUR sind das 15,75 EUR. |
 | Bagatellgrenze | Ausgezahlt wird nur, wenn der Anspruch über 4 EUR liegt. Dafür braucht man mindestens drei Fälle. |
-| Ticketpreis | 49 EUR bis Ende 2024, 58 EUR in 2025, 63 EUR seit 2026. Die App setzt ihn automatisch. |
+| Ticketpreis | 49 EUR bis Ende 2024, 58 EUR in 2025, 63 EUR seit 2026. Die App füllt ihn passend zum Monat vor. Wer weniger zahlt (z. B. Jobticket), trägt den gezahlten Preis ein; dann sinkt die Obergrenze entsprechend. |
 | Frist | Am besten innerhalb von drei Monaten einreichen; die Bahn nimmt Anträge bis zu zwölf Monate an. |
 
 Bei einem Zugausfall zählt die Ankunft mit dem nächsten Zug, der tatsächlich gefahren ist.

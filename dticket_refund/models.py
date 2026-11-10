@@ -25,6 +25,7 @@ class Ticket:
     monat: date               # immer der 1. des Monats
     abonummer: str = ""       # Abo-/Auftragsnummer (bleibt ueber die Monate gleich)
     ticketnummer: str = ""    # Ticketnummer des Monats (optional)
+    preis_eur: Optional[float] = None   # tatsaechlich gezahlter Preis (z. B. Jobticket); None = regulaerer Preis
     ausgestellt_von: str = "DB Vertrieb GmbH"   # Verkaeufer des Tickets
 
     @property

@@ -67,7 +67,7 @@ class Job:
 JOBS: dict[str, Job] = {}
 
 
-def _monate_zur_auswahl() -> list[tuple[str, str]]:
+def _monate_zur_auswahl() -> list[tuple[str, str, float]]:
     """Abgeschlossene Monate der letzten 12 Monate, neuester zuerst (Frist: 1 Jahr)."""
     monate = []
     m = date.today().replace(day=1)
@@ -75,7 +75,7 @@ def _monate_zur_auswahl() -> list[tuple[str, str]]:
         m = (m - timedelta(days=1)).replace(day=1)
         if m < date(2023, 5, 1):
             break
-        monate.append((m.isoformat(), Ticket(monat=m).monat_label))
+        monate.append((m.isoformat(), Ticket(monat=m).monat_label, ticketpreis(m)))
     return monate
 
 
@@ -150,6 +150,20 @@ async def profil_speichern(request: Request):
     return {"ok": True}
 
 
+def _preis_aus(form, monat: date) -> float | None:
+    """Gezahlter Ticketpreis aus dem Formular (Komma oder Punkt). Leer oder regulaer -> None."""
+    roh = (form.get("preis") or "").strip().replace("€", "").replace(",", ".")
+    if not roh:
+        return None
+    try:
+        preis = round(float(roh), 2)
+    except ValueError:
+        raise HTTPException(400, f"Ticketpreis „{roh}“ ist keine Zahl.")
+    if not 0 < preis <= 500:
+        raise HTTPException(400, "Bitte einen Ticketpreis zwischen 0 und 500 EUR angeben.")
+    return None if abs(preis - ticketpreis(monat)) < 0.005 else preis
+
+
 @app.post("/suche")
 async def suche(request: Request):
     form = await request.form()
@@ -158,7 +172,7 @@ async def suche(request: Request):
     if not strecken:
         raise HTTPException(400, "Bitte mindestens eine Strecke mit Bahnhöfen aus der Vorschlagsliste angeben.")
     ticket = Ticket(monat=date.fromisoformat(form["monat"]), abonummer=(form.get("abonummer") or "").strip(),
-                    ticketnummer=(form.get("ticketnummer") or "").strip())
+                    preis_eur=_preis_aus(form, date.fromisoformat(form["monat"])))
     config.speichere_profil(person, ticket.abonummer, roh)
     job_id = secrets.token_urlsafe(8)
     job = Job(ticket=ticket, person=person, strecken=strecken)

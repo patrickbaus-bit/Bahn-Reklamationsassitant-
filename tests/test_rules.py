@@ -164,3 +164,21 @@ def test_jeder_haken_ist_noetig():
         rest = [g.verspaetung_min for g in antrag.fahrten if g is not f]
         assert zaehle(rest) < ziel
     assert len(antrag.reserve) + len(antrag.verworfen) > 0              # Rest bleibt sichtbar, ohne Haken
+
+
+def test_abweichender_ticketpreis_senkt_die_kappung():
+    # Jobticket fuer 44,10 EUR: Kappung 25 % = 11,03 EUR statt 15,75 EUR -> 8 Faelle statt 11
+    person, ticket, strecke = _rahmen()
+    ticket.preis_eur = 44.10
+    fahrten = [_fahrt(t, "hin", 70) for t in range(1, 20)]
+    antrag = optimiere(person, ticket, strecke, fahrten)
+    assert antrag.ticketpreis_eur == 44.10
+    assert antrag.betrag_eur == REGELN.kappung_eur(44.10) < 15.75
+    assert len(antrag.fahrten) == REGELN.max_einheiten(44.10) == 8
+    assert any("angegebenen Ticketpreis" in h for h in antrag.hinweise)
+
+
+def test_regulaerer_preis_ohne_hinweis():
+    antrag = optimiere(*_rahmen(), [_fahrt(t, "hin", 70) for t in range(1, 20)])
+    assert antrag.ticketpreis_eur == 63.00
+    assert not any("angegebenen Ticketpreis" in h for h in antrag.hinweise)

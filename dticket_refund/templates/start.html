@@ -33,10 +33,12 @@
   <h2>2. Monat</h2>
   <div class="raster">
     <div><label>Gültigkeitsmonat</label>
-      <select name="monat" required>{% for wert, name in monate %}<option value="{{ wert }}">{{ name }}</option>{% endfor %}</select></div>
-    <div><label>Ticketnummer dieses Monats (optional)</label><input name="ticketnummer" placeholder="falls abweichend von der Abonummer"></div>
+      <select name="monat" id="monat" required>{% for wert, name, preis in monate %}<option value="{{ wert }}" data-preis="{{ "%.2f"|format(preis) }}">{{ name }}</option>{% endfor %}</select></div>
+    <div><label>Gezahlter Ticketpreis in EUR</label><input name="preis" id="preis" inputmode="decimal" required pattern="[0-9]{1,3}([.,][0-9]{1,2})?"
+      value="{% if monate %}{{ ("%.2f"|format(monate[0][2])).replace('.', ',') }}{% endif %}"></div>
   </div>
-  <p class="klein">Nur abgeschlossene Monate der letzten 12 Monate (Antragsfrist). Der Ticketpreis wird automatisch nach Monat gesetzt.
+  <p class="klein">Nur abgeschlossene Monate der letzten 12 Monate (Antragsfrist). Der Ticketpreis ist mit dem regulären Preis des Monats vorausgefüllt.
+  Wer weniger zahlt (z. B. Jobticket), trägt hier den tatsächlich gezahlten Preis ein; die Obergrenze von 25 % richtet sich danach.
   Datenquelle: {{ quelle }}. Pro Monat wird einmalig eine Archivdatei (ca. 100–650 MB) geladen und lokal gespeichert
   {% if archiv_monate %}(bereits vorhanden: {{ archiv_monate|join(', ') }}){% endif %}.</p>
   <p class="klein" id="archivstatus"></p>
@@ -132,6 +134,13 @@ document.querySelectorAll('.entfernen').forEach(a => a.onclick = e => {
   b.querySelectorAll('input[type=text],input:not([type]),input[type=hidden]').forEach(i => i.value = '');
   b.hidden = true; zeigeMehrKnopf();
 });
+
+// Ticketpreis folgt dem Monat, solange er nicht von Hand geaendert wurde
+const monatFeld = document.getElementById('monat'), preisFeld = document.getElementById('preis');
+const regulaer = () => monatFeld.selectedOptions[0].dataset.preis.replace('.', ',');
+let preisVonHand = false;
+preisFeld.addEventListener('input', () => { preisVonHand = preisFeld.value.trim() !== '' && preisFeld.value !== regulaer(); });
+monatFeld.addEventListener('change', () => { if (!preisVonHand) preisFeld.value = regulaer(); });
 
 // Persoenliche Daten: bei vollstaendigem Profil eingeklappt, Knopf klappt auf/zu
 const profilFelder = document.getElementById('profil_felder'), profilAuf = document.getElementById('profil_auf');

@@ -146,6 +146,8 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
               auffuellen: bool = True) -> Antrag:
     if isinstance(strecken, Pendelstrecke):
         strecken = [strecken]
+    if preis_eur is None:
+        preis_eur = ticket.preis_eur
     preis = preis_eur if preis_eur is not None else ticketpreis(ticket.monat)
     kandidaten = [f for f in fahrten if f.verspaetung_min >= regeln.schwelle_sammeln_min]
     erzwungen = erzwungen or []
@@ -163,6 +165,11 @@ def optimiere(person: Person, ticket: Ticket, strecken: Pendelstrecke | list[Pen
     betrag = betraege[rechenweg]
 
     hinweise: list[str] = []
+    regulaer = ticketpreis(ticket.monat)
+    if abs(preis - regulaer) >= 0.005:
+        hinweise.append(f"Gerechnet mit dem angegebenen Ticketpreis von {_eur(preis)} statt des regulären Preises "
+                        f"von {_eur(regulaer)}. Bitte im Antrag einen Nachweis über den gezahlten Preis beilegen, "
+                        f"falls die Bahn danach fragt.")
     if not kandidaten:
         hinweise.append("Keine Verspätung ab 20 Minuten auf den Strecken gefunden.")
     elif betrag == 0.0:
