@@ -99,18 +99,19 @@ def test_sammelregel_stoppt_an_der_kappung_und_verteilt():
     assert max(b - a for a, b in zip(tage, tage[1:])) <= 3
 
 
-def test_kurze_faelle_sind_immer_dabei():
+def test_nur_so_viele_haken_wie_noetig():
     fahrten = [_fahrt(t, "hin", 60 + t) for t in range(1, 12)]         # 11 Faelle >= 60 wuerden allein reichen
     fahrten += [_fahrt(t, "hin", 30) for t in range(12, 18)]           # 6 kurze
     antrag = optimiere(*_rahmen(), fahrten)
     assert antrag.rechenweg == "sammeln" and antrag.betrag_eur == 15.75
-    kurze = [f for f in antrag.fahrten if f.verspaetung_min < 60]
-    assert len(kurze) >= 3                                             # mindestens drei kurze dabei
-    # 3 x 30 = 90 min -> 1 Einheit, also nur noch 10 lange noetig
-    assert sum(1 for f in antrag.fahrten if f.verspaetung_min >= 60) == 10
+    # Nur so viele Haken wie fuer 15,75 EUR noetig: die 11 langen Faelle reichen,
+    # die kurzen stehen ohne Haken in der Liste.
+    assert len(antrag.fahrten) == 11
+    assert all(f.verspaetung_min >= 60 for f in antrag.fahrten)
+    ohne_haken = antrag.reserve + antrag.verworfen
+    assert sum(1 for f in ohne_haken if f.verspaetung_min < 60) == 6
     assert antrag.einheiten == 11
     assert len(antrag.reserve) == 17 - len(antrag.fahrten) and antrag.verworfen == []
-    assert any("Sammelregel" in h and "Rest" in h for h in antrag.hinweise)
 
 
 def test_ohne_kurze_faelle_bleibt_einzelfall():
@@ -148,3 +149,18 @@ def test_fahrtage_und_monatsgrenzen():
     tage = list(strecke.fahrtage(ticket.erster_tag, ticket.letzter_tag))
     assert date(2026, 2, 2) not in tage and date(2026, 2, 1) not in tage   # 1.2.2026 ist Sonntag
     assert len(tage) == 19
+
+
+def test_jeder_haken_ist_noetig():
+    # Gemischt: 8 lange Faelle und viele kurze. Es wird genau bis 15,75 EUR angehakt;
+    # streicht man irgendeine angehakte Fahrt, faellt der Betrag unter die Kappung.
+    fahrten = [_fahrt(t, "hin", 70) for t in range(1, 9)]
+    fahrten += [_fahrt(t, "rueck", 35) for t in range(1, 21)]
+    antrag = optimiere(*_rahmen(), fahrten)
+    assert antrag.betrag_eur == 15.75
+    zaehle = REGELN.einheiten_sammeln if antrag.rechenweg == "sammeln" else REGELN.einheiten_einzelfall
+    ziel = REGELN.max_einheiten(antrag.ticketpreis_eur)
+    for f in antrag.fahrten:
+        rest = [g.verspaetung_min for g in antrag.fahrten if g is not f]
+        assert zaehle(rest) < ziel
+    assert len(antrag.reserve) + len(antrag.verworfen) > 0              # Rest bleibt sichtbar, ohne Haken

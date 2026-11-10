@@ -10,7 +10,8 @@ Verteilung: statt stur die laengsten Verspaetungen zu nehmen, werden die Fahrten
 gewaehlt, dass zwischen den Fahrtagen moeglichst viele Tage liegen (Farthest-Point-
 Greedy). Gewaehlt wird nur so viel, wie fuer die Kappung noetig ist; dazu kommen
 RESERVE weitere Fahrten als Ersatz, falls der Nutzer welche streicht. Alles andere
-wird verworfen und muss nicht eingereicht werden.
+wird verworfen und muss nicht eingereicht werden. Angehakt wird nur, was fuer den
+Hoechstbetrag noetig ist: jede vorausgewaehlte Fahrt traegt zum Betrag bei.
 
 Rechenwege (siehe rules.py): "einzelfall" (1,50 EUR je Fall ab 60 min) und "sammeln"
 (zusaetzlich die Faelle von 20 bis 59 min addiert, 1,50 EUR je volle 60 min davon).
@@ -23,7 +24,6 @@ from .models import Antrag, Fahrt, Pendelstrecke, Person, Ticket
 from .rules import REGELN, Regelwerk, ticketpreis
 
 RESERVE = 10
-MIN_KURZE = 3   # so viele Faelle von 20-59 min sollen (wenn vorhanden) immer dabei sein
 
 
 def _eur(x: float) -> str:
@@ -80,6 +80,36 @@ def _greedy(kandidaten: list[Fahrt], gewaehlt: list[Fahrt], fertig, maximal: int
     return neu
 
 
+def _kuerzen(gewaehlt: list[Fahrt], fest: set[int], zaehle, ziel: int) -> list[Fahrt]:
+    """Streicht Fahrten, die fuer die Kappung nicht noetig sind (sie bleiben ohne Haken sichtbar).
+
+    Nur wenn die Kappung ueberhaupt erreicht ist. Vom Nutzer angehakte Fahrten (``fest``)
+    bleiben. Probiert zwei Streichreihenfolgen (erst kurze Faelle, erst lange Faelle; riskante
+    jeweils zuerst) und behaelt die Auswahl mit den wenigsten Fahrten, bei Gleichstand die
+    mit weniger riskanten Faellen.
+    """
+    minuten = lambda g: [f.verspaetung_min for f in g]
+    if zaehle(minuten(gewaehlt)) < ziel:
+        return []
+
+    def streiche(reihenfolge) -> list[Fahrt]:
+        rest = list(gewaehlt)
+        for f in sorted((f for f in gewaehlt if id(f) not in fest), key=reihenfolge):
+            ohne = [g for g in rest if g is not f]
+            if zaehle(minuten(ohne)) >= ziel:
+                rest = ohne
+        return rest
+
+    varianten = [
+        streiche(lambda f: (not f.risiko, f.verspaetung_min >= 60, f.verspaetung_min)),   # kurze zuerst
+        streiche(lambda f: (not f.risiko, f.verspaetung_min < 60, -f.verspaetung_min)),   # lange zuerst
+    ]
+    beste = min(varianten, key=lambda g: (len(g), sum(1 for f in g if f.risiko)))
+    entfernt = [f for f in gewaehlt if not any(f is g for g in beste)]
+    gewaehlt[:] = beste
+    return entfernt
+
+
 def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg: str,
              erzwungen: list[Fahrt], auffuellen: bool) -> tuple[list[Fahrt], list[Fahrt], int, list[Fahrt]]:
     """(eingereicht, reserve, einheiten, unplausibel) fuer einen Rechenweg.
@@ -100,15 +130,9 @@ def _auswahl(kandidaten: list[Fahrt], regeln: Regelwerk, preis: float, rechenweg
             continue
         (gewaehlt if vertraeglich(f, gewaehlt) else unplausibel).append(f)
     if auffuellen:
-        if rechenweg == "sammeln":
-            # Ein paar kurze Faelle (20-59 min) gehoeren immer dazu - sie werden zusammengerechnet.
-            # ... aber keine, die einem langen Fall am selben Tag in derselben Richtung den Platz nehmen.
-            lange_slots = {(f.datum, f.richtung) for f in passende if f.verspaetung_min >= regeln.schwelle_einzelfall_min}
-            kurze = [f for f in passende if f.verspaetung_min < regeln.schwelle_einzelfall_min
-                     and (f.datum, f.richtung) not in lange_slots]
-            anzahl_kurze = lambda g: sum(1 for f in g if f.verspaetung_min < regeln.schwelle_einzelfall_min)
-            _greedy(kurze, gewaehlt, lambda g: anzahl_kurze(g) >= MIN_KURZE, MIN_KURZE)
         _greedy(passende, gewaehlt, lambda g: zaehle([f.verspaetung_min for f in g]) >= ziel, len(passende))
+        # Nur so viele Haken wie fuer den Hoechstbetrag noetig; der Rest bleibt ohne Haken in der Liste.
+        _kuerzen(gewaehlt, {id(f) for f in erzwungen}, zaehle, ziel)
     eingereicht = list(gewaehlt)
     # Reserve aus allen Kandidaten ab 20 min: faellt eine lange Verspaetung weg, kann die
     # Neuberechnung auf die Sammelregel wechseln und kurze Faelle brauchen.

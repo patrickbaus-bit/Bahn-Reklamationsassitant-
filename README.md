@@ -1,45 +1,86 @@
-# Deutschlandticket-Refund
+# Bahn-Bonus – Deutschlandticket-Entschädigung auf Knopfdruck
 
-Wer mit dem Deutschlandticket pendelt, hat bei Verspätungen Anspruch auf Entschädigung, muss
-dafür aber jede verspätete Fahrt selbst heraussuchen und beantragen. Dieses Programm macht das
-automatisch: Du gibst einmal deine Daten und deine Pendelstrecke ein, wählst den Monat, und die
-App sucht alle Verspätungen heraus, stellt den Antrag als PDF zusammen und öffnet eine fertige
-E-Mail an die Bahn. Du musst nur noch auf „Senden“ klicken.
+Wer mit dem Deutschlandticket pendelt, hat bei Verspätungen Anspruch auf Geld zurück, bis zu
+**15,75 EUR pro Monat** (25 % von 63 EUR). Kaum jemand holt es sich, weil man dafür jede
+verspätete Fahrt selbst heraussuchen, mit Zugnummer und Uhrzeit aufschreiben und beantragen muss.
 
-Das Programm läuft komplett auf deinem eigenen Rechner. Es gibt keinen Server im Internet, dem
-du deine Daten anvertraust.
+Bahn-Bonus macht das automatisch: Du gibst einmal deine Daten und deine Pendelstrecke ein,
+wählst den Monat, und die App sucht alle Verspätungen heraus, wählt die passenden Fahrten aus,
+stellt den Antrag als PDF zusammen und öffnet eine fertige E-Mail an die Bahn. Du prüfst die
+Liste und klickst auf „Senden“. Einmal im Monat, etwa fünf Minuten.
 
-## Schnellstart
+- **Läuft komplett auf deinem Rechner.** Kein Konto, kein Server, keine Provision. Name, IBAN
+  und Abonummer bleiben in einer Datei auf deinem Mac.
+- **Echte Daten statt Schätzung.** Grundlage sind die offiziellen Echtzeitdaten der Bahn
+  (dieselben wie auf den Anzeigetafeln), rückwirkend für den ganzen Monat.
+- **Kennt die Tarifregeln.** Einzelfälle ab 60 Minuten, Sammelregel für 20 bis 59 Minuten,
+  Obergrenze, Bagatellgrenze und Ticketpreis je Jahr sind eingebaut.
 
-Einmalig einrichten (installiert alles Nötige in einen Unterordner `.venv`):
+**Voraussetzungen:** ein Mac mit macOS 11 oder neuer (Apple Silicon oder Intel) und Internet.
+Homebrew, Python oder Admin-Rechte brauchst du nicht. Linux geht auch, dann im Browser statt
+als App.
 
-```sh
+---
+
+## Einrichtung mit KI (empfohlen)
+
+Du musst nichts selbst im Terminal machen: Ein KI-Assistent mit Terminal-Zugriff richtet alles
+für dich ein, zum Beispiel **Claude** (Claude-Desktop-App mit Zugriff auf deinen Mac, oder
+Claude Code), **Codex** oder **Cursor**. Kopiere einfach diesen Text hinein:
+
+```text
+Richte mir bitte Bahn-Bonus (Deutschlandticket-Entschädigung) auf meinem Mac ein. Die komplette Anleitung für dich steht hier:
+https://raw.githubusercontent.com/patrickbaus-bit/Bahn-Reklamationsassitant-/main/AGENTS.md
+Lies sie zuerst vollständig und folge ihr Schritt für Schritt.
+```
+
+Das passiert danach, und das machst du dabei:
+
+1. **Erlauben.** Die KI fragt vor jedem Befehl um Erlaubnis.
+2. **Warten.** Die Installation dauert ein paar Minuten. Am Ende liegt **Bahn-Bonus** mit
+   Bahn-Symbol auf deinem Schreibtisch, und die App öffnet sich.
+3. **Deine Daten trägst du selbst in die App ein**, nicht in den Chat. Die KI fragt nie nach
+   IBAN oder Abonummer.
+
+Nutzt du eine KI ohne Terminal-Zugriff (z. B. ChatGPT im Browser), funktioniert der gleiche
+Text auch: Dann erklärt sie dir Schritt für Schritt, was du ins Terminal kopieren sollst.
+
+---
+
+## Installation von Hand (einmalig, ca. 5 Minuten)
+
+Öffne das Programm **Terminal** (Cmd + Leertaste → „Terminal“) und kopiere diese Zeilen hinein:
+
+```zsh
+cd ~
+curl -L -o bahn-bonus.zip https://github.com/patrickbaus-bit/Bahn-Reklamationsassitant-/archive/refs/heads/main.zip
+unzip -q -o bahn-bonus.zip && rm bahn-bonus.zip
+mv Bahn-Reklamationsassitant--main Bahn-Bonus-App && cd Bahn-Bonus-App
 sh bootstrap.sh
+sh app-erstellen.sh
 ```
 
-Danach jedes Mal starten mit:
+Das lädt das Programm in den Ordner `Bahn-Bonus-App` in deinem Benutzerordner, installiert
+alles Nötige in dessen Unterordner `.venv` und legt **Bahn-Bonus.app** auf den Schreibtisch.
+Findet der Installer kein passendes Python, holt er sich selbst eines (über das Werkzeug
+[uv](https://docs.astral.sh/uv/), ohne Admin-Passwort). Mit Git geht statt der ersten drei
+Zeilen auch `git clone https://github.com/patrickbaus-bit/Bahn-Reklamationsassitant-.git Bahn-Bonus-App`.
 
-```sh
-.venv/bin/dticket-refund
+Starten per **Doppelklick auf Bahn-Bonus** auf dem Schreibtisch. Meldet macOS beim ersten Mal,
+die App könne nicht geöffnet werden: Rechtsklick → **Öffnen** → **Öffnen**. Schließt du das
+Fenster, ist das Programm komplett beendet. PDF und .eml landen im Download-Ordner.
+
+Ohne App, im Browser (auch auf Linux):
+
+```zsh
+~/Bahn-Bonus-App/.venv/bin/dticket-refund
 ```
 
-Dann im Browser `http://127.0.0.1:8765/` öffnen. Voraussetzung ist Python 3.10 oder neuer,
-auf dem Mac zum Beispiel über `brew install python`.
+Dann `http://127.0.0.1:8765/` öffnen.
 
-### Im eigenen App-Fenster statt im Browser (Mac)
-
-```sh
-.venv/bin/python -m dticket_refund.fenster
-```
-
-Öffnet die Oberfläche in einem eigenen Fenster. Schließt man das Fenster, wird das Programm
-komplett beendet. PDF und .eml landen im Download-Ordner und öffnen sich direkt in Vorschau
-bzw. Mail.
-
-Wer das per Doppelklick starten möchte, legt sich ein kleines App-Bundle an, zum Beispiel
-`Bahn-Bonus.app` auf dem Schreibtisch. Darin liegt unter `Contents/MacOS/Bahn-Bonus` ein
-ausführbares Skript, das in den Projektordner wechselt und diesen Befehl startet. Mit
-`--icon pfad/zum/icon.icns` zeigt das Dock ein eigenes Symbol.
+**Aktualisieren:** mit Git `git pull && sh bootstrap.sh`, sonst die Zeilen oben einfach noch
+einmal ausführen (vorher den alten Ordner löschen). Dein Profil und die geladenen Bahn-Daten
+bleiben erhalten, weil sie nicht im Programmordner liegen.
 
 ## So funktioniert die Bedienung
 
@@ -86,10 +127,12 @@ Damit der Antrag glaubwürdig ist und nicht mehr Fahrten enthält als nötig, ge
 - Pro Tag höchstens eine Hinfahrt und eine Rückfahrt. Die Rückfahrt muss nach der Ankunft der
   Hinfahrt abfahren und auf derselben Strecke liegen.
 - Die Fahrten werden möglichst gleichmäßig über den Monat verteilt statt an wenigen Tagen gehäuft.
-- Es kommen immer auch ein paar kurze Verspätungen (20 bis 59 Minuten) in den Antrag, die
-  zusammengerechnet werden, sofern es welche gibt.
-- Eingereicht wird nur so viel, wie für die Obergrenze nötig ist. Alle weiteren gefundenen
-  Verspätungen stehen ohne Haken in der Liste und lassen sich bei Bedarf anhaken.
+- Angehakt wird nur so viel, wie für die Obergrenze nötig ist: Jede vorausgewählte Fahrt
+  trägt zum Betrag bei, streicht man eine, sinkt er. Die App probiert dafür beide Rechenwege
+  (nur Fälle ab 60 Minuten oder zusätzlich die Sammelregel) und nimmt die Auswahl mit den
+  wenigsten Fahrten.
+- Alle weiteren gefundenen Verspätungen stehen ohne Haken in der Liste. Fährst du eine
+  angehakte Fahrt doch nicht, hakst du stattdessen eine andere an und klickst „Neu berechnen“.
 - Fälle, die die Bahn anders bewerten könnte, sind mit ⚠ markiert: Verspätungen knapp über
   20 oder 60 Minuten und pauschal angesetzte Ausfälle. Die App bevorzugt robuste Fälle.
 
@@ -150,6 +193,8 @@ Wer kein Apple Mail nutzt, nimmt die .eml-Datei.
 ## Für Entwickler
 
 ```sh
+sh bootstrap.sh                                                 # Einrichten / aktualisieren
+sh app-erstellen.sh [Ordner]                                    # Doppelklick-App anlegen
 .venv/bin/python -m pytest -q                                   # Tests
 .venv/bin/dticket-refund suche "Frankfurt Hbf" "Darmstadt Hbf" 2026-08   # Suche im Terminal
 ```
@@ -157,3 +202,11 @@ Wer kein Apple Mail nutzt, nimmt die .eml-Datei.
 Aufbau: `models.py` (Datenmodell), `rules.py` (Tarifregeln), `optimizer.py` (Auswahl der
 Fahrten), `search.py` (Monatssuche), `sources/archiv.py` (Datenquelle), `pdfgen.py`,
 `mailout.py`, `web.py` (Oberfläche), `fenster.py` (eigenes App-Fenster), `cli.py`.
+
+`AGENTS.md` ist die Schritt-für-Schritt-Anleitung, mit der KI-Assistenten das Programm einrichten.
+
+## Hinweis
+
+Bahn-Bonus ist ein privates Projekt und gehört nicht zur Deutschen Bahn. Die App erstellt
+den Antrag, prüfen und absenden tust du selbst. Reiche nur Fahrten ein, die du wirklich gefahren bist.
+Verspätungsdaten: [piebro/deutsche-bahn-data](https://huggingface.co/datasets/piebro/deutsche-bahn-data), CC BY 4.0.
